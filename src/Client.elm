@@ -4,7 +4,7 @@ module Client exposing
     , Technology(..)
     , clientTypeFromString
     , clientTypeToString
-    , init
+    , getConfig
     )
 
 {-| The interface to the Client config structure.
@@ -20,6 +20,8 @@ import Http
 import Json.Decode as Decode
     exposing
         ( Decoder
+        , bool
+        , list
         , string
         , succeed
         )
@@ -31,7 +33,7 @@ import Json.Decode.Pipeline exposing (required)
 
 
 type alias ClientConfig =
-    { technology : Technology
+    { technologies : List Technology
     , type_ : ClientType
     }
 
@@ -48,19 +50,62 @@ type Technology
 
 
 
--- INIT
-
-
-init : ClientType -> ClientConfig
-init type_ =
-    { technology = VNC
-    , type_ = type_
-    }
-
-
-
 -- SERIALIZATION
+
+
+configDecoder : Decoder ClientConfig
+configDecoder =
+    Decode.succeed ClientConfig
+        |> required "technologies" technologiesDecoder
+        |> required "presenter" clientTypeDecoder
+
+
+technologiesDecoder : Decoder (List Technology)
+technologiesDecoder =
+    Decode.list technologyDecoder
+
+
+technologyDecoder : Decoder Technology
+technologyDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\b ->
+                case b of
+                    "VNC" ->
+                        Decode.succeed VNC
+
+                    "WebRTC" ->
+                        Decode.succeed WebRTC
+
+                    other ->
+                        Decode.fail <| "Unknown technology: " ++ other
+            )
+
+
+clientTypeDecoder : Decoder ClientType
+clientTypeDecoder =
+    Decode.bool
+        |> Decode.andThen
+            (\b ->
+                case b of
+                    True ->
+                        Decode.succeed Presenter
+
+                    False ->
+                        Decode.succeed Guest
+            )
+
+
+
 -- API
+
+
+getConfig : Http.Request ClientConfig
+getConfig =
+    Api.get Endpoint.clientConfig configDecoder
+
+
+
 -- HELPERS
 
 
@@ -82,19 +127,14 @@ clientTypeFromString clientTypeStr =
                     Unknow
 
 
-clientTypeToString : Maybe ClientType -> String
+clientTypeToString : ClientType -> String
 clientTypeToString clientType =
     case clientType of
-        Nothing ->
-            ""
+        Presenter ->
+            "Presenter"
 
-        Just c ->
-            case c of
-                Presenter ->
-                    "Presenter"
+        Guest ->
+            "Guest"
 
-                Guest ->
-                    "Guest"
-
-                Unknow ->
-                    "Something unexpected just happened!"
+        Unknow ->
+            "Something unexpected just happened!"

@@ -1,5 +1,6 @@
 module Api.Endpoint exposing
     ( Endpoint
+    , clientConfig
     , request
     )
 
@@ -40,7 +41,7 @@ type Endpoint
 
 
 type Api
-    = Example
+    = MockServer
 
 
 unwrap : Endpoint -> String
@@ -55,8 +56,8 @@ url api paths queryParams =
     let
         apiRef =
             case api of
-                Example ->
-                    "/example/api"
+                MockServer ->
+                    "http://localhost:3000"
     in
     Url.Builder.crossOrigin apiRef paths queryParams
         |> Endpoint
@@ -64,3 +65,8 @@ url api paths queryParams =
 
 
 -- ENDPOINTS
+
+
+clientConfig : Endpoint
+clientConfig =
+    url MockServer [ "config" ] []

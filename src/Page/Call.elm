@@ -20,6 +20,7 @@ import Client
         , Technology(..)
         , clientTypeFromString
         , clientTypeToString
+        , getConfig
         )
 import Css
     exposing
@@ -82,7 +83,7 @@ type alias Model =
     , problems : List Problem
     , timeZone : Time.Zone
     , state : CallState
-    , client : ClientConfig
+    , clientConfig : ConfigStatus ClientConfig
 
     -- Loaded independently from server
     }
@@ -100,23 +101,29 @@ type CallState
     | Failed
 
 
+type ConfigStatus a
+    = ConfigInitial
+    | ConfigSuccess a
+    | ConfigFailed
+
+
 init : Session -> Maybe String -> ( Model, Cmd Msg )
 init session queryParam =
     let
-        clienttTypeStr =
-            clientTypeFromString queryParam
-
-        clientConfig =
-            Client.init clienttTypeStr
+        configCmd =
+            Http.send RequestConfig getConfig
     in
     ( { title = "Initial state"
       , session = session
       , problems = []
       , state = Initial
       , timeZone = Time.utc
-      , client = clientConfig
+      , clientConfig = ConfigInitial
       }
-    , Task.perform GotTimeZone Time.here
+    , Cmd.batch
+        [ Task.perform GotTimeZone Time.here
+        , configCmd
+        ]
     )
 
 
@@ -126,6 +133,7 @@ init session queryParam =
 
 type Msg
     = GotTimeZone Time.Zone
+    | RequestConfig (Result Http.Error ClientConfig)
     | ChangeState CallState
 
 
@@ -135,13 +143,21 @@ update msg model =
         GotTimeZone tz ->
             ( { model | timeZone = tz }, Cmd.none )
 
+        RequestConfig (Ok config) ->
+            ( { model | clientConfig = ConfigSuccess config }, Cmd.none )
+
+        RequestConfig (Err error) ->
+            let
+                serverErrors =
+                    [ ServerError (decodeError error) ]
+            in
+            ( { model | clientConfig = ConfigFailed, problems = serverErrors }, Cmd.none )
+
         ChangeState state ->
             ( { model | state = state }, Cmd.none )
 
 
 
---SetClient client ->
---( { model | client = Just client }, Cmd.none )
 -- SUBSCRIPTIONS
 -- EXPORT
 
@@ -162,10 +178,19 @@ view :
         , problems : List Problem
         , timeZone : Time.Zone
         , state : CallState
-        , client : ClientConfig
+        , clientConfig : ConfigStatus ClientConfig
     }
     -> { title : String, content : Html Msg }
 view model =
+    let
+        ( clientType, firstTechnology ) =
+            case model.clientConfig of
+                ConfigSuccess a ->
+                    ( a.type_, Maybe.withDefault VNC (List.head a.technologies) )
+
+                _ ->
+                    ( Guest, VNC )
+    in
     { title = model.title
     , content =
         case model.state of
@@ -184,13 +209,13 @@ view model =
                                     [ h1 [ css [ margin zero ] ]
                                         [ text
                                             ("Camera is off : "
-                                                ++ (clientTypeToString <| Just model.client.type_)
+                                                ++ clientTypeToString clientType
                                                 ++ " "
-                                                ++ (technologyToString <| Just model.client.technology)
+                                                ++ technologyToString firstTechnology
                                             )
                                         ]
                                     ]
-                                , if model.client.type_ == Presenter then
+                                , if clientType == Presenter then
                                     div [ onClick <| ChangeState CallStarted ]
                                         [ button [ css [ Styles.startButton ] ] [ text "Start Call" ]
 
@@ -254,13 +279,13 @@ view model =
                                     [ h1 [ css [ margin zero ] ]
                                         [ text
                                             ("Camera is off : "
-                                                ++ (clientTypeToString <| Just model.client.type_)
+                                                ++ clientTypeToString clientType
                                                 ++ " "
-                                                ++ (technologyToString <| Just model.client.technology)
+                                                ++ technologyToString firstTechnology
                                             )
                                         ]
                                     ]
-                                , if model.client.type_ == Presenter then
+                                , if clientType == Presenter then
                                     div [ onClick <| ChangeState CallStopped ]
                                         [ button [ css [ Styles.stopButton ] ] [ text "Stop Call" ]
 
@@ -289,13 +314,13 @@ view model =
                                     [ h1 [ css [ margin zero ] ]
                                         [ text
                                             ("Camera is off : "
-                                                ++ (clientTypeToString <| Just model.client.type_)
+                                                ++ clientTypeToString clientType
                                                 ++ " "
-                                                ++ (technologyToString <| Just model.client.technology)
+                                                ++ technologyToString firstTechnology
                                             )
                                         ]
                                     ]
-                                , if model.client.type_ == Presenter then
+                                , if clientType == Presenter then
                                     div [ onClick <| ChangeState CallStarted ]
                                         [ button [ css [ Styles.startButton ] ] [ text "Start Call" ]
 
@@ -362,19 +387,14 @@ viewProblem problem =
 -- HELPERS
 
 
-technologyToString : Maybe Technology -> String
+technologyToString : Technology -> String
 technologyToString tech =
     case tech of
-        Nothing ->
-            ""
+        VNC ->
+            "VNC"
 
-        Just t ->
-            case t of
-                VNC ->
-                    "VNC"
-
-                WebRTC ->
-                    "WebRTC"
+        WebRTC ->
+            "WebRTC"
 
 
 stateToString : CallState -> String
