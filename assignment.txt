@@ -1,0 +1,52 @@
+[ ] One bit of information telling whether your client would be considered a presenter or participant
+If "presenter", receives the configuration for screensharing:
+ - "VNC Screen Sharing" - "VNC"
+ - "WebRTC Screen Sharing" - "WebRTC".
+
+[ ] - The order these technologies are placed in the list defines the priority, i.e.
+if VNC is specified first, then your client should try to start VNC
+and use WebRTC only in case of failure (fallback).
+
+[ ] - If presenter, there is a "Start" button that must be displayed in the UI.
+
+[ ] - Clicking "Start" button in presenter's mode, sends a special command specifying the sharing technology
+The server will reply with either an acknowledgement
+(which means that your screen sharing is connected to the server and the server will relay screen updates to the viewers)
+or an error; a fallback should be tried in case of error, otherwise the error is displayed in the UI.
+
+[ ] - If VNC and the transmission starts successfully, the server tells whether the updates are sent from the mobile
+or desktop operating system
+(hereinafter referred as "mobile flag").
+
+Started:
+[ ] - "Start" button becomes a "Stop" button, pressing it should trigger a stop command sent to the server (assume it never fails).
+
+1) VNC and mobileFlag == false
+the server will regularly send messages to your client informing about the list of the available windows and screens.
+[ ] - 2 buttons in the UI: "Select Screen" and "Select Window", clicking will open a pop up window with 2 tabs
+("Screns" or "Windows").
+If user clicks on "Select Screen", then active tab will be set to "Screens" (the same applies for "Windows").
+
+[ ] - according to selection window or screen, client informs the server about decision.
+[ ] - Display the name of selection on "selection name"
+[ ] - User can still click "Select Screen" or "Select Window" buttons to change the transmitted entity.
+
+[ ] - Additionally there is a "pause" button on top of the canvas, which can temporarily pause the transmission,
+until the user presses on it again (resumes transmission).
+Clicking on this button should also produce a message sent to the server, informing it that we want to pause/resume the
+transmission (we can assume that this command never fails as well).
+
+2) VNC and mobileFlag == true
+[ ] - transmission begins immediately and there are no "Select Window" or "Select Screen" buttons.
+[ ] - pause button is still present.
+[ ] - selection name = "Mobile Display"
+
+
+3) WebTRC
+[ ] - only one "Select Screen" button is shown, pressing it also triggers a pop up where the user can select a screen,
+but in this case no additional information should be sent to the server,
+just assume that after selecting this screen, the transmission starts automatically (browser logic).
+[ ] - pause button
+
+[ ] - There is a canvas in the middle of the screen which shows a preview of the content which participants will see. The canvas is only displayed
+when something is being transmitted.
