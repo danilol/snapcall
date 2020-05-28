@@ -1,0 +1,6 @@
+{
+  "config": {
+    "presenter": true,
+    "technologies": [ "VNC", "WebRTC"]
+  }
+}
