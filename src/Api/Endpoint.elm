@@ -1,5 +1,6 @@
 module Api.Endpoint exposing
     ( Endpoint
+    , acknowledge
     , clientConfig
     , request
     )
@@ -67,6 +68,15 @@ url api paths queryParams =
 -- ENDPOINTS
 
 
-clientConfig : Endpoint
-clientConfig =
-    url MockServer [ "config" ] []
+clientConfig : Bool -> Endpoint
+clientConfig option =
+    if option then
+        url MockServer [ "config" ] []
+
+    else
+        url MockServer [ "configGuest" ] []
+
+
+acknowledge : Endpoint
+acknowledge =
+    url MockServer [ "acknowledgments" ] []

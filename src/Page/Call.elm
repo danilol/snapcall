@@ -15,12 +15,17 @@ import Api exposing (decodeError)
 import Asset
 import Client
     exposing
-        ( ClientConfig
+        ( AcknowledgmentMetadata
+        , CallState(..)
+        , ClientConfig
         , ClientType(..)
         , Technology(..)
+        , acknowledgeRequest
         , clientTypeFromString
         , clientTypeToString
         , getConfig
+        , stateToString
+        , technologyToString
         )
 import Css
     exposing
@@ -58,7 +63,9 @@ import Html.Styled as Styled
 import Html.Styled.Attributes exposing (css, id)
 import Html.Styled.Events exposing (onClick)
 import Http
+import Page.Components.Button as Button exposing (Button, State(..))
 import Page.Components.Header as Header
+import Process
 import Session exposing (Session)
 import Styles
     exposing
@@ -83,6 +90,7 @@ type alias Model =
     , problems : List Problem
     , timeZone : Time.Zone
     , state : CallState
+    , mobile : Bool
     , clientConfig : ConfigStatus ClientConfig
 
     -- Loaded independently from server
@@ -91,14 +99,6 @@ type alias Model =
 
 type Problem
     = ServerError String
-
-
-type CallState
-    = Initial
-    | CallStarted
-    | CallStopped
-    | Loading
-    | Failed
 
 
 type ConfigStatus a
@@ -111,13 +111,20 @@ init : Session -> Maybe String -> ( Model, Cmd Msg )
 init session queryParam =
     let
         configCmd =
-            Http.send RequestConfig getConfig
+            case queryParam of
+                -- with param == Guest, without == Presenter
+                Nothing ->
+                    Http.send RequestConfig <| getConfig True
+
+                Just q ->
+                    Http.send RequestConfig <| getConfig False
     in
-    ( { title = "Initial state"
+    ( { title = "Snapview call"
       , session = session
       , problems = []
       , state = Initial
       , timeZone = Time.utc
+      , mobile = False
       , clientConfig = ConfigInitial
       }
     , Cmd.batch
@@ -135,6 +142,8 @@ type Msg
     = GotTimeZone Time.Zone
     | RequestConfig (Result Http.Error ClientConfig)
     | ChangeState CallState
+    | DelayAndChangeState CallState
+    | Acknowledgment (Result Http.Error AcknowledgmentMetadata)
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -154,12 +163,55 @@ update msg model =
             ( { model
                 | clientConfig = ConfigFailed
                 , problems = serverErrors
+                , state = Failed
               }
             , Cmd.none
             )
 
+        DelayAndChangeState state ->
+            ( { model | state = Client.Loading }
+            , Process.sleep 2000 |> Task.perform (always (ChangeState state))
+            )
+
         ChangeState state ->
-            ( { model | state = state }, Cmd.none )
+            let
+                cmd =
+                    Http.send Acknowledgment <|
+                        acknowledgeRequest
+                            { technology = extractTechnology model.clientConfig
+                            , mobileFlag = False
+                            , state = state
+                            }
+            in
+            ( { model | state = state }, cmd )
+
+        Acknowledgment (Ok acknowledge) ->
+            let
+                st =
+                    case acknowledge.state of
+                        StartAttempt ->
+                            CallStarted
+
+                        _ ->
+                            acknowledge.state
+            in
+            ( { model | state = st }, Cmd.none )
+
+        Acknowledgment (Err error) ->
+            let
+                _ =
+                    Debug.log "errror" error
+
+                serverErrors =
+                    [ ServerError (decodeError error) ]
+            in
+            ( { model
+                | clientConfig = ConfigFailed
+                , state = Failed
+                , problems = serverErrors
+              }
+            , Cmd.none
+            )
 
 
 
@@ -188,13 +240,11 @@ view :
     -> { title : String, content : Html Msg }
 view model =
     let
-        ( clientType, firstTechnology ) =
-            case model.clientConfig of
-                ConfigSuccess a ->
-                    ( a.type_, Maybe.withDefault VNC (List.head a.technologies) )
+        clientType =
+            extractClientType model.clientConfig
 
-                _ ->
-                    ( Guest, VNC )
+        firstTechnology =
+            extractTechnology model.clientConfig
     in
     { title = model.title
     , content =
@@ -231,23 +281,30 @@ callBtnPartial model clientType =
     let
         ( btn, action ) =
             case model.state of
-                Initial ->
-                    ( button [ css [ Styles.startButton ] ] [ text "Start Call" ], ChangeState CallStarted )
+                Client.Initial ->
+                    --Button.view (Button "Start Call" Valid "") (DelayAndChangeState StartAttempt)
+                    ( button [ css [ Styles.startButton ] ] [ text "Start Call" ], DelayAndChangeState StartAttempt )
 
-                CallStarted ->
+                Client.StartAttempt ->
+                    --Button.view (Button "..." Valid "") (DelayAndChangeState StartAttempt)
+                    ( button [ css [ Styles.startButton ] ] [ text "..." ], ChangeState StartAttempt )
+
+                Client.CallStarted ->
                     ( button [ css [ Styles.stopButton ] ] [ text "Stop Call" ], ChangeState CallStopped )
 
-                CallStopped ->
-                    ( button [ css [ Styles.startButton ] ] [ text "Start Call" ], ChangeState CallStarted )
+                Client.CallStopped ->
+                    ( button [ css [ Styles.startButton ] ] [ text "Start Call" ], DelayAndChangeState StartAttempt )
 
-                Loading ->
-                    ( button [ css [ Styles.stopButton ] ] [ text "Stop Call" ], ChangeState CallStarted )
+                Client.Loading ->
+                    ( button [ css [ Styles.startButton ] ] [ text "..." ], ChangeState CallStarted )
 
-                Failed ->
+                _ ->
+                    --Button.view (Button "test" Button.Loading "") (DelayAndChangeState StartAttempt)
                     ( button [ css [ Styles.stopButton ] ] [ text "Stop Call" ], ChangeState CallStarted )
     in
     if clientType == Presenter then
         div [ onClick action ] [ btn ]
+        --btn
 
     else
         emptyHtml
@@ -304,30 +361,21 @@ viewProblem problem =
 -- HELPERS
 
 
-technologyToString : Technology -> String
-technologyToString tech =
-    case tech of
-        VNC ->
-            "VNC"
+extractTechnology : ConfigStatus ClientConfig -> Technology
+extractTechnology config =
+    case config of
+        ConfigSuccess a ->
+            Maybe.withDefault VNC (List.head a.technologies)
 
-        WebRTC ->
-            "WebRTC"
+        _ ->
+            VNC
 
 
-stateToString : CallState -> String
-stateToString state =
-    case state of
-        Initial ->
-            "Initial"
+extractClientType : ConfigStatus ClientConfig -> ClientType
+extractClientType config =
+    case config of
+        ConfigSuccess a ->
+            a.type_
 
-        Loading ->
-            "Loading"
-
-        Failed ->
-            "Failed"
-
-        CallStarted ->
-            "Started"
-
-        CallStopped ->
-            "Stopped"
+        _ ->
+            Guest
