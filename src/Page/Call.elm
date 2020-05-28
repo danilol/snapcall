@@ -70,7 +70,7 @@ import Styles
         )
 import Task
 import Time
-import Utils.Html exposing (select)
+import Utils.Html exposing (emptyHtml, select)
 
 
 
@@ -151,7 +151,12 @@ update msg model =
                 serverErrors =
                     [ ServerError (decodeError error) ]
             in
-            ( { model | clientConfig = ConfigFailed, problems = serverErrors }, Cmd.none )
+            ( { model
+                | clientConfig = ConfigFailed
+                , problems = serverErrors
+              }
+            , Cmd.none
+            )
 
         ChangeState state ->
             ( { model | state = state }, Cmd.none )
@@ -193,151 +198,63 @@ view model =
     in
     { title = model.title
     , content =
-        case model.state of
-            Initial ->
-                div [ css [ resetStyles ] ]
-                    [ Header.view
-                    , div
-                        [ css [ container, marginTop (px 50) ] ]
-                        [ div [ css [ shadow ] ]
-                            [ div
-                                [ css [ Styles.dataHeader ]
-                                ]
-                                [ h1 [ css [ margin zero ] ] [ text <| "Snapview: " ++ stateToString model.state ] ]
-                            , div [ css [ Styles.cameraContainter ] ]
-                                [ div [ css [ Styles.camera ] ]
-                                    [ h1 [ css [ margin zero ] ]
-                                        [ text
-                                            ("Camera is off : "
-                                                ++ clientTypeToString clientType
-                                                ++ " "
-                                                ++ technologyToString firstTechnology
-                                            )
-                                        ]
-                                    ]
-                                , if clientType == Presenter then
-                                    div [ onClick <| ChangeState CallStarted ]
-                                        [ button [ css [ Styles.startButton ] ] [ text "Start Call" ]
-
-                                        --, button [ onClick <| SetClient Guest ] [ text "Join as a guest" ]
-                                        ]
-
-                                  else
-                                    div [] []
+        div [ css [ resetStyles ] ]
+            [ Header.view
+            , div
+                [ css [ container, marginTop (px 50) ] ]
+                [ div [ css [ shadow ] ]
+                    [ div
+                        [ css [ Styles.dataHeader ]
+                        ]
+                        [ h1 [ css [ margin zero ] ] [ text <| "Snapview: " ++ stateToString model.state ] ]
+                    , div [ css [ Styles.cameraContainter ] ]
+                        [ div [ css [ Styles.camera ] ]
+                            [ h1 [ css [ margin zero ] ]
+                                [ text
+                                    ("Camera is off : "
+                                        ++ clientTypeToString clientType
+                                        ++ " "
+                                        ++ technologyToString firstTechnology
+                                    )
                                 ]
                             ]
+                        , callBtnPartial model clientType
                         ]
                     ]
-
-            Loading ->
-                div [ css [ resetStyles ] ]
-                    [ Header.view
-                    , div
-                        [ css [ container, marginTop (px 50), width (pct 50) ] ]
-                        [ div [ css [ shadow ] ]
-                            [ div [ css [ Styles.dataHeader ] ] [ h1 [ css [ margin zero ] ] [ text "Snapview" ] ]
-
-                            --, video [ id "videoTag" ] []
-                            , Styled.table [ css [ Styles.table, tableStriped ] ]
-                                [ tbody []
-                                    [ tr []
-                                        [ td []
-                                            [ text "Picture" ]
-                                        , td []
-                                            [ img
-                                                [ Asset.src Asset.srCall
-                                                , css [ width (px 300) ]
-                                                ]
-                                                []
-                                            ]
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ]
-                    ]
-
-            Failed ->
-                div
-                    [ css [ resetStyles ] ]
-                    [ Header.view
-                    , viewProblems model
-                    ]
-
-            CallStarted ->
-                div [ css [ resetStyles ] ]
-                    [ Header.view
-                    , div
-                        [ css [ container, marginTop (px 50) ] ]
-                        [ div [ css [ shadow ] ]
-                            [ div
-                                [ css [ Styles.dataHeader ]
-                                ]
-                                [ h1 [ css [ margin zero ] ] [ text <| "Snapview: " ++ stateToString model.state ] ]
-                            , div [ css [ Styles.cameraContainter ] ]
-                                [ div [ css [ Styles.camera ] ]
-                                    [ h1 [ css [ margin zero ] ]
-                                        [ text
-                                            ("Camera is off : "
-                                                ++ clientTypeToString clientType
-                                                ++ " "
-                                                ++ technologyToString firstTechnology
-                                            )
-                                        ]
-                                    ]
-                                , if clientType == Presenter then
-                                    div [ onClick <| ChangeState CallStopped ]
-                                        [ button [ css [ Styles.stopButton ] ] [ text "Stop Call" ]
-
-                                        --, button [ onClick <| SetClient Guest ] [ text "Join as a guest" ]
-                                        ]
-
-                                  else
-                                    div [] []
-                                ]
-                            ]
-                        ]
-                    ]
-
-            CallStopped ->
-                div [ css [ resetStyles ] ]
-                    [ Header.view
-                    , div
-                        [ css [ container, marginTop (px 50) ] ]
-                        [ div [ css [ shadow ] ]
-                            [ div
-                                [ css [ Styles.dataHeader ]
-                                ]
-                                [ h1 [ css [ margin zero ] ] [ text <| "Snapview: " ++ stateToString model.state ] ]
-                            , div [ css [ Styles.cameraContainter ] ]
-                                [ div [ css [ Styles.camera ] ]
-                                    [ h1 [ css [ margin zero ] ]
-                                        [ text
-                                            ("Camera is off : "
-                                                ++ clientTypeToString clientType
-                                                ++ " "
-                                                ++ technologyToString firstTechnology
-                                            )
-                                        ]
-                                    ]
-                                , if clientType == Presenter then
-                                    div [ onClick <| ChangeState CallStarted ]
-                                        [ button [ css [ Styles.startButton ] ] [ text "Start Call" ]
-
-                                        --, button [ onClick <| SetClient Guest ] [ text "Join as a guest" ]
-                                        ]
-
-                                  else
-                                    div [] []
-                                ]
-                            ]
-                        ]
-                    ]
+                ]
+            ]
     }
 
 
+callBtnPartial : { model | state : CallState } -> ClientType -> Html Msg
+callBtnPartial model clientType =
+    let
+        ( btn, action ) =
+            case model.state of
+                Initial ->
+                    ( button [ css [ Styles.startButton ] ] [ text "Start Call" ], ChangeState CallStarted )
 
--- SEARCH view
+                CallStarted ->
+                    ( button [ css [ Styles.stopButton ] ] [ text "Stop Call" ], ChangeState CallStopped )
+
+                CallStopped ->
+                    ( button [ css [ Styles.startButton ] ] [ text "Start Call" ], ChangeState CallStarted )
+
+                Loading ->
+                    ( button [ css [ Styles.stopButton ] ] [ text "Stop Call" ], ChangeState CallStarted )
+
+                Failed ->
+                    ( button [ css [ Styles.stopButton ] ] [ text "Stop Call" ], ChangeState CallStarted )
+    in
+    if clientType == Presenter then
+        div [ onClick action ] [ btn ]
+
+    else
+        emptyHtml
+
+
+
+-- ERRORS view
 
 
 viewProblems : { model | problems : List Problem } -> Html msg

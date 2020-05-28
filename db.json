@@ -1,6 +1,19 @@
 {
   "config": {
     "presenter": true,
-    "technologies": [ "VNC", "WebRTC"]
-  }
+    "technologies": [
+      "VNC",
+      "WebRTC"
+    ]
+  },
+  "acknowledgments": [
+    {
+      "id": 1,
+      "technology": "VNC"
+    },
+    {
+      "technology": "VNC",
+      "id": 2
+    }
+  ]
 }
