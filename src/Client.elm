@@ -61,7 +61,7 @@ type CallState
     | CallStarted
     | CallPaused
     | CallUnpaused
-    | CallStopped
+    | CallFinished
     | Loading
     | Failed
 
@@ -80,6 +80,7 @@ type Technology
 type SharingOption
     = Screen
     | Window
+    | Mobile
 
 
 
@@ -159,8 +160,8 @@ stateDecoder =
                     "CallUnpaused" ->
                         Decode.succeed CallUnpaused
 
-                    "CallStopped" ->
-                        Decode.succeed CallStopped
+                    "CallFinished" ->
+                        Decode.succeed CallFinished
 
                     "Loading" ->
                         Decode.succeed Loading
@@ -177,7 +178,7 @@ stateDecoder =
 -- API
 
 
-getConfig : { mobileFlag : Bool } -> Http.Request ClientConfig
+getConfig : { mobileFlag : Bool, rtcPriority : Bool } -> Http.Request ClientConfig
 getConfig config =
     Api.get (Endpoint.clientConfig config) configDecoder
 
@@ -269,8 +270,8 @@ stateToString state =
         CallUnpaused ->
             "CallUnpaused"
 
-        CallStopped ->
-            "CallStopped"
+        CallFinished ->
+            "CallFinished"
 
         StartAttempt ->
             "StartAttempt"
@@ -289,3 +290,6 @@ sharingOptionToString maybeOption =
 
                 Screen ->
                     "Screen Sharing"
+
+                Mobile ->
+                    "Mobile Display"

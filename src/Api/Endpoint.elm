@@ -66,15 +66,28 @@ url api paths queryParams =
 
 
 -- ENDPOINTS
+-- retrieves the config for each different case we control in this application
+-- if it's mobile, RTC first, Mobile, etc
 
 
-clientConfig : { mobileFlag : Bool } -> Endpoint
-clientConfig config =
-    if config.mobileFlag then
-        url MockServer [ "configGuest" ] []
+clientConfig : { mobileFlag : Bool, rtcPriority : Bool } -> Endpoint
+clientConfig { mobileFlag, rtcPriority } =
+    case ( rtcPriority, mobileFlag ) of
+        ( True, _ ) ->
+            -- clients/3 config in db.json
+            url MockServer [ "clients", "3" ] []
 
-    else
-        url MockServer [ "config" ] []
+        ( _, True ) ->
+            -- clients/2 config in db.json
+            url MockServer [ "clients", "2" ] []
+
+        _ ->
+            -- clients/1 config in db.json
+            url MockServer [ "clients", "1" ] []
+
+
+
+-- posts actions to the API according to the flow
 
 
 acknowledge : Endpoint

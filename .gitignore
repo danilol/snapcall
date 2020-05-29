@@ -20,4 +20,4 @@ tmp
 package-lock.json
 
 # json-server db
-db.json
+#db.json

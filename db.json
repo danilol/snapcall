@@ -1,19 +1,58 @@
 {
-  "config": {
-    "presenter": true,
-    "technologies": [
-      "VNC",
-      "WebRTC"
-    ]
-  },
-  "acknowledgments": [
+  "clients": [
     {
       "id": 1,
-      "technology": "VNC"
+      "presenter": true,
+      "technologies": [
+        "VNC",
+        "WebRTC"
+      ],
+      "mobileFlag": false
     },
     {
+      "id": 2,
+      "presenter": false,
+      "technologies": [
+        "VNC",
+        "WebRTC"
+      ],
+      "mobileFlag": false
+    },
+    {
+      "id": 3,
+      "presenter": true,
+      "technologies": [
+        "WebRTC",
+        "VNC"
+      ],
+      "mobileFlag": false
+    },
+    {
+      "id": 4,
+      "presenter": false,
+      "technologies": [
+        "WebRTC",
+        "VNC"
+      ],
+      "mobileFlag": false
+    },
+    {
+      "id": 5,
+      "presenter": true,
+      "technologies": [
+        "AnyOther",
+        "VNC"
+      ],
+      "mobileFlag": false
+    }
+  ],
+  "acknowledgments": [
+    {
       "technology": "VNC",
-      "id": 2
+      "state": "StartAttempt",
+      "mobileFlag": false,
+      "sharingOption": "",
+      "id": 1
     }
   ]
 }

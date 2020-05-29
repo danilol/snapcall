@@ -121,7 +121,7 @@ viewHero =
                     , buttonHome
                     , marginRight (px 15)
                     ]
-                , Route.href (Route.Call Nothing)
+                , Route.href (Route.Call Nothing Nothing)
                 ]
                 [ text "Join the Call" ]
             ]

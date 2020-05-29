@@ -116,33 +116,77 @@ type ConfigStatus a
     | ConfigFailed
 
 
-init : Session -> Maybe String -> ( Model, Cmd Msg )
-init session queryParam =
+{-| Scenarios :
+Scenario 1:
+presenter
+mobileFlag = false -> VNC
+/call
+
+Scenario 2:
+guest
+mobileFlag = true -> VNC
+/call?userType=guest
+
+Scenario 3:
+presenter
+mobileFlag = false -> WebRTC
+/call?technology=WebRTC
+
+Scenario 4:
+guest
+mobileFlag = false -> WebRTC
+/call?technology=WebRTC
+
+Scenario 5:
+presenter
+mobileFlag = false -> VNC
+/call?technology=WebRTC
+ERROR
+
+-}
+init : Session -> Maybe String -> Maybe String -> ( Model, Cmd Msg )
+init session guestParam technologyParam =
     let
         mobile =
-            case queryParam of
-                -- with param == Guest, without == Presenter
+            case guestParam of
+                --  if has param => Guest else => Presenter
                 Nothing ->
                     False
 
                 Just _ ->
                     True
+
+        rtc =
+            case technologyParam of
+                --  if has param => WebRTC else => VNC
+                Nothing ->
+                    False
+
+                Just _ ->
+                    True
+
+        ( state, sharingOption ) =
+            if mobile then
+                ( CallStarted, Just Mobile )
+
+            else
+                ( Initial, Nothing )
     in
     ( { title = "Snapview call"
       , session = session
       , problems = []
-      , state = Initial
+      , state = state
       , timeZone = Time.utc
       , mobile = mobile
       , clientConfig = ConfigInitial
-      , sharingOption = Nothing
+      , sharingOption = sharingOption
 
       -- screen control
       , showScreenDialog = False
       }
     , Cmd.batch
         [ Task.perform GotTimeZone Time.here
-        , Http.send RequestConfig <| getConfig { mobileFlag = mobile }
+        , Http.send RequestConfig <| getConfig { mobileFlag = mobile, rtcPriority = rtc }
         ]
     )
 
@@ -188,7 +232,9 @@ update msg model =
 
         DelayAndChangeState state ->
             ( { model | state = Client.Loading }
-            , Process.sleep 2000 |> Task.perform (always (ChangeState state))
+              -- to give the load effect
+            , Process.sleep 2000
+                |> Task.perform (always (ChangeState state))
             )
 
         ChangeState state ->
@@ -301,6 +347,35 @@ view model =
 
         firstTechnology =
             extractTechnology model.clientConfig
+
+        isSharing =
+            case model.sharingOption of
+                Just _ ->
+                    True
+
+                Nothing ->
+                    False
+
+        stateText =
+            case model.state of
+                Initial ->
+                    "Click to start the call"
+
+                Client.Loading ->
+                    "Loading..."
+
+                Client.CallPaused ->
+                    "Transmition Paused..."
+
+                Client.CallFinished ->
+                    "Click to start a new call"
+
+                _ ->
+                    if isSharing then
+                        "You are " ++ sharingOptionToString model.sharingOption
+
+                    else
+                        "Your are sharing your camera and it's off..."
     in
     { title = model.title
     , content =
@@ -315,23 +390,22 @@ view model =
                         [ h1 [ css [ margin zero ] ] [ text <| "Snapview: " ++ stateToString model.state ] ]
                     , div [ css [ Styles.cameraContainter ] ]
                         [ div [ css [ Styles.camera ] ]
-                            [ h1 [ css [ margin zero ] ] [ text "Camera is off " ]
+                            [ h1 [ css [ margin zero ] ] [ text stateText ]
                             , div [ css [ margin zero ] ] [ text ("ClientType: " ++ clientTypeToString clientType) ]
                             , div [ css [ margin zero ] ] [ text ("Tech Type: " ++ technologyToString firstTechnology) ]
-                            , case model.sharingOption of
-                                Just _ ->
-                                    div [ css [ margin zero ] ] [ text ("SharingOption: " ++ sharingOptionToString model.sharingOption) ]
+                            , if isSharing then
+                                div [ css [ margin zero ] ] [ text ("Selection Name: " ++ sharingOptionToString model.sharingOption) ]
 
-                                Nothing ->
-                                    emptyHtml
+                              else
+                                emptyHtml
                             ]
                         , callFlowButtonView model clientType
-                        , shareScreenButtonView model
+                        , shareScreenButtonView model clientType
                         , pauseButtonView model
                         , Dialog.view
                             { visible = model.showScreenDialog
                             , cancelAction = CloseScreenShareModal
-                            , message = Styled.toUnstyled screenSharingModalView
+                            , message = Styled.toUnstyled <| screenSharingModalView firstTechnology
                             }
                         ]
                     ]
@@ -353,15 +427,15 @@ callFlowButtonView model clientType =
                     ( button [ css [ Styles.greenButton ] ] [ text "..." ], ChangeState StartAttempt )
 
                 Client.CallStarted ->
-                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallStopped )
+                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallFinished )
 
                 Client.CallPaused ->
-                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallStopped )
+                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallFinished )
 
                 Client.CallUnpaused ->
-                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallStopped )
+                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallFinished )
 
-                Client.CallStopped ->
+                Client.CallFinished ->
                     ( button [ css [ Styles.greenButton ] ] [ text "Start Call" ], DelayAndChangeState StartAttempt )
 
                 Client.Loading ->
@@ -404,53 +478,72 @@ shareScreenButtonView :
         | state : CallState
         , sharingOption : Maybe SharingOption
     }
+    -> ClientType
     -> Html Msg
-shareScreenButtonView model =
-    case model.sharingOption of
-        Nothing ->
-            case model.state of
-                Client.CallStarted ->
-                    div []
-                        [ button [ css [ Styles.blueButton ], onClick OpenScreenShareModal ]
-                            [ text "Present now" ]
-                        ]
+shareScreenButtonView model clientType =
+    let
+        content =
+            case model.sharingOption of
+                Nothing ->
+                    case model.state of
+                        Client.CallStarted ->
+                            div []
+                                [ button [ css [ Styles.blueButton ], onClick OpenScreenShareModal ]
+                                    [ text "Present now" ]
+                                ]
 
-                Client.CallUnpaused ->
-                    div []
-                        [ button [ css [ Styles.blueButton ], onClick OpenScreenShareModal ]
-                            [ text "Present now" ]
-                        ]
+                        Client.CallUnpaused ->
+                            div []
+                                [ button [ css [ Styles.blueButton ], onClick OpenScreenShareModal ]
+                                    [ text "Present now" ]
+                                ]
 
-                _ ->
-                    emptyHtml
+                        _ ->
+                            emptyHtml
 
-        Just _ ->
-            case model.state of
-                Client.CallStarted ->
-                    div []
-                        [ button [ css [ Styles.blueButton ], onClick StopScreenSharing ]
-                            [ text "Stop Presenting" ]
-                        ]
+                Just _ ->
+                    case model.state of
+                        Client.CallStarted ->
+                            div []
+                                [ button [ css [ Styles.blueButton ], onClick StopScreenSharing ]
+                                    [ text "Stop Presenting" ]
+                                ]
 
-                Client.CallUnpaused ->
-                    div []
-                        [ button [ css [ Styles.blueButton ], onClick StopScreenSharing ]
-                            [ text "Stop Presenting" ]
-                        ]
+                        Client.CallUnpaused ->
+                            div []
+                                [ button [ css [ Styles.blueButton ], onClick StopScreenSharing ]
+                                    [ text "Stop Presenting" ]
+                                ]
 
-                _ ->
-                    emptyHtml
+                        _ ->
+                            emptyHtml
+    in
+    if clientType == Presenter then
+        content
+
+    else
+        emptyHtml
 
 
-screenSharingModalView : Html Msg
-screenSharingModalView =
-    div []
-        [ span [] [ text "You are about to start Screen sharing:" ]
-        , div [ css [ sharingOptionContainer ] ]
-            [ div [ css [ sharingOptionContent ], onClick <| SetSharingOption Screen ] [ text "Select Screen" ]
-            , div [ css [ sharingOptionContent ], onClick <| SetSharingOption Window ] [ text "Select Window" ]
-            ]
-        ]
+screenSharingModalView : Technology -> Html Msg
+screenSharingModalView technology =
+    case technology of
+        VNC ->
+            div []
+                [ span [] [ text "You are about to start Screen sharing:" ]
+                , div [ css [ sharingOptionContainer ] ]
+                    [ div [ css [ sharingOptionContent ], onClick <| SetSharingOption Screen ] [ text "Select Screen" ]
+                    , div [ css [ sharingOptionContent ], onClick <| SetSharingOption Window ] [ text "Select Window" ]
+                    ]
+                ]
+
+        WebRTC ->
+            div []
+                [ span [] [ text "You are about to start Screen sharing:" ]
+                , div [ css [ sharingOptionContainer ] ]
+                    [ div [ css [ sharingOptionContent ], onClick <| SetSharingOption Screen ] [ text "Select Screen" ]
+                    ]
+                ]
 
 
 
