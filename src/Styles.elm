@@ -1,5 +1,6 @@
 module Styles exposing
-    ( buttonHome
+    ( blueButton
+    , buttonHome
     , buttonLarge
     , buttonSearch
     , camera
@@ -10,21 +11,24 @@ module Styles exposing
     , disabled
     , editEmailClose
     , editEmailSave
+    , greenButton
+    , greyButton
     , header
     , heroContainer
     , input
     , inputGroup
     , linkPurple
     , logo
+    , redButton
     , resetStyles
     , row
     , shadow
-    , startButton
+    , sharingOptionContainer
+    , sharingOptionContent
     , statusBadge
     , statusBadgeActive
     , statusBadgeInactive
     , statusBadgeIssued
-    , stopButton
     , table
     , tableResponsive
     , tableStriped
@@ -41,6 +45,7 @@ import Css
         , backgroundColor
         , batch
         , block
+        , border
         , border3
         , borderBottom3
         , borderBottomLeftRadius
@@ -279,8 +284,8 @@ header =
         ]
 
 
-startButton : Style
-startButton =
+normalButton : Style
+normalButton =
     batch
         [ display inlineBlock
         , fontWeight (int 400)
@@ -288,49 +293,48 @@ startButton =
         , textAlign center
         , Css.property "user-select" <| "none"
         , verticalAlign middle
+        , color (hex "fff")
+        , border3 (px 1) solid transparent
+        , padding2 (rem 0.375) (rem 0.75)
+        , fontSize (rem 1)
+        , lineHeight (num 1.5)
+        , borderRadius (rem 0.25)
+        , cursor pointer
+        , textDecoration none
+        , Css.property "transition" <| "all ease .3s"
+        ]
+
+
+greenButton : Style
+greenButton =
+    batch
+        [ normalButton
         , backgroundColor (hex "00796b")
-        , color (hex "fff")
-        , border3 (px 1) solid transparent
-        , padding2 (rem 0.375) (rem 0.75)
-        , fontSize (rem 1)
-        , lineHeight (num 1.5)
-        , borderRadius (rem 0.25)
-        , cursor pointer
-        , textDecoration none
-        , Css.property "transition" <| "all ease .3s"
         ]
 
 
-stopButton : Style
-stopButton =
+redButton : Style
+redButton =
     batch
-        [ display inlineBlock
-        , fontWeight (int 400)
-        , color (hex "212529")
-        , textAlign center
-        , Css.property "user-select" <| "none"
-        , verticalAlign middle
+        [ normalButton
         , backgroundColor (hex "c5221f")
-        , color (hex "fff")
-        , border3 (px 1) solid transparent
-        , padding2 (rem 0.375) (rem 0.75)
-        , fontSize (rem 1)
-        , lineHeight (num 1.5)
-        , borderRadius (rem 0.25)
-        , cursor pointer
-        , textDecoration none
-        , Css.property "transition" <| "all ease .3s"
         ]
 
 
+blueButton : Style
+blueButton =
+    batch
+        [ normalButton
+        , backgroundColor (hex "8483da")
+        ]
 
---background: #6818d2;
---color: white;
---width: 81px;
---height: 31px;
---font-size: 20px;
---border-radius: 8px;
---font-weight: bold;
+
+greyButton : Style
+greyButton =
+    batch
+        [ normalButton
+        , backgroundColor (hex "949496")
+        ]
 
 
 buttonLarge : Style
@@ -523,4 +527,30 @@ camera =
         , justifyContent center
         , padding <| px 5
         , textAlign center
+        , displayFlex
+        ]
+
+
+sharingOptionContainer : Style
+sharingOptionContainer =
+    batch
+        [ displayFlex
+        , width <| pct 100
+        , height <| pct 100
+        ]
+
+
+sharingOptionContent : Style
+sharingOptionContent =
+    batch
+        [ displayFlex
+        , alignItems center
+        , justifyContent center
+        , width <| px 200
+        , height <| px 200
+        , color <| hex "fff"
+        , backgroundColor <| hex "000"
+        , margin auto
+        , borderRadius <| px 8
+        , cursor pointer
         ]

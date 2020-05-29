@@ -116,7 +116,7 @@ viewHero =
                 [ text "Boiler plate for an elm 0.19 app with weback loader config" ]
             , a
                 [ css
-                    [ Styles.startButton
+                    [ Styles.greenButton
                     , buttonLarge
                     , buttonHome
                     , marginRight (px 15)

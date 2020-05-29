@@ -3,11 +3,13 @@ module Client exposing
     , CallState(..)
     , ClientConfig
     , ClientType(..)
+    , SharingOption(..)
     , Technology(..)
     , acknowledgeRequest
     , clientTypeFromString
     , clientTypeToString
     , getConfig
+    , sharingOptionToString
     , stateToString
     , technologyToString
     )
@@ -57,6 +59,8 @@ type CallState
     = Initial
     | StartAttempt
     | CallStarted
+    | CallPaused
+    | CallUnpaused
     | CallStopped
     | Loading
     | Failed
@@ -71,6 +75,11 @@ type ClientType
 type Technology
     = VNC
     | WebRTC
+
+
+type SharingOption
+    = Screen
+    | Window
 
 
 
@@ -144,6 +153,12 @@ stateDecoder =
                     "CallStarted" ->
                         Decode.succeed CallStarted
 
+                    "CallPaused" ->
+                        Decode.succeed CallPaused
+
+                    "CallUnpaused" ->
+                        Decode.succeed CallUnpaused
+
                     "CallStopped" ->
                         Decode.succeed CallStopped
 
@@ -162,24 +177,26 @@ stateDecoder =
 -- API
 
 
-getConfig : Bool -> Http.Request ClientConfig
-getConfig option =
-    Api.get (Endpoint.clientConfig option) configDecoder
+getConfig : { mobileFlag : Bool } -> Http.Request ClientConfig
+getConfig config =
+    Api.get (Endpoint.clientConfig config) configDecoder
 
 
 acknowledgeRequest :
     { technology : Technology
     , state : CallState
     , mobileFlag : Bool
+    , sharingOption : Maybe SharingOption
     }
     -> Http.Request AcknowledgmentMetadata
-acknowledgeRequest config =
+acknowledgeRequest { technology, state, mobileFlag, sharingOption } =
     let
         body =
             Encode.object
-                [ ( "technology", Encode.string <| technologyToString config.technology )
-                , ( "state", Encode.string <| stateToString config.state )
-                , ( "mobileFlag", Encode.bool config.mobileFlag )
+                [ ( "technology", Encode.string <| technologyToString technology )
+                , ( "state", Encode.string <| stateToString state )
+                , ( "mobileFlag", Encode.bool mobileFlag )
+                , ( "sharingOption", Encode.string <| sharingOptionToString sharingOption )
                 ]
                 |> Http.jsonBody
     in
@@ -246,8 +263,29 @@ stateToString state =
         CallStarted ->
             "CallStarted"
 
+        CallPaused ->
+            "CallPaused"
+
+        CallUnpaused ->
+            "CallUnpaused"
+
         CallStopped ->
             "CallStopped"
 
         StartAttempt ->
             "StartAttempt"
+
+
+sharingOptionToString : Maybe SharingOption -> String
+sharingOptionToString maybeOption =
+    case maybeOption of
+        Nothing ->
+            ""
+
+        Just option ->
+            case option of
+                Window ->
+                    "Window Sharing"
+
+                Screen ->
+                    "Screen Sharing"

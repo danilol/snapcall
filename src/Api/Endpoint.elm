@@ -68,13 +68,13 @@ url api paths queryParams =
 -- ENDPOINTS
 
 
-clientConfig : Bool -> Endpoint
-clientConfig option =
-    if option then
-        url MockServer [ "config" ] []
+clientConfig : { mobileFlag : Bool } -> Endpoint
+clientConfig config =
+    if config.mobileFlag then
+        url MockServer [ "configGuest" ] []
 
     else
-        url MockServer [ "configGuest" ] []
+        url MockServer [ "config" ] []
 
 
 acknowledge : Endpoint

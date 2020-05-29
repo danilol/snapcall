@@ -19,11 +19,13 @@ import Client
         , CallState(..)
         , ClientConfig
         , ClientType(..)
+        , SharingOption(..)
         , Technology(..)
         , acknowledgeRequest
         , clientTypeFromString
         , clientTypeToString
         , getConfig
+        , sharingOptionToString
         , stateToString
         , technologyToString
         )
@@ -53,6 +55,8 @@ import Html.Styled as Styled
         , h2
         , img
         , li
+        , p
+        , span
         , tbody
         , td
         , text
@@ -64,6 +68,7 @@ import Html.Styled.Attributes exposing (css, id)
 import Html.Styled.Events exposing (onClick)
 import Http
 import Page.Components.Button as Button exposing (Button, State(..))
+import Page.Components.Dialog as Dialog
 import Page.Components.Header as Header
 import Process
 import Session exposing (Session)
@@ -72,6 +77,8 @@ import Styles
         ( container
         , resetStyles
         , shadow
+        , sharingOptionContainer
+        , sharingOptionContent
         , tableStriped
         , textCenter
         )
@@ -92,8 +99,10 @@ type alias Model =
     , state : CallState
     , mobile : Bool
     , clientConfig : ConfigStatus ClientConfig
+    , showScreenDialog : Bool
+    , sharingOption : Maybe SharingOption
 
-    -- Loaded independently from server
+    --, activeTab : Maybe String
     }
 
 
@@ -110,26 +119,30 @@ type ConfigStatus a
 init : Session -> Maybe String -> ( Model, Cmd Msg )
 init session queryParam =
     let
-        configCmd =
+        mobile =
             case queryParam of
                 -- with param == Guest, without == Presenter
                 Nothing ->
-                    Http.send RequestConfig <| getConfig True
+                    False
 
-                Just q ->
-                    Http.send RequestConfig <| getConfig False
+                Just _ ->
+                    True
     in
     ( { title = "Snapview call"
       , session = session
       , problems = []
       , state = Initial
       , timeZone = Time.utc
-      , mobile = False
+      , mobile = mobile
       , clientConfig = ConfigInitial
+      , sharingOption = Nothing
+
+      -- screen control
+      , showScreenDialog = False
       }
     , Cmd.batch
         [ Task.perform GotTimeZone Time.here
-        , configCmd
+        , Http.send RequestConfig <| getConfig { mobileFlag = mobile }
         ]
     )
 
@@ -144,6 +157,11 @@ type Msg
     | ChangeState CallState
     | DelayAndChangeState CallState
     | Acknowledgment (Result Http.Error AcknowledgmentMetadata)
+    | OpenScreenShareModal
+    | CloseScreenShareModal
+    | SetSharingOption SharingOption
+    | StopScreenSharing
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -181,6 +199,7 @@ update msg model =
                             { technology = extractTechnology model.clientConfig
                             , mobileFlag = False
                             , state = state
+                            , sharingOption = model.sharingOption
                             }
             in
             ( { model | state = state }, cmd )
@@ -199,9 +218,6 @@ update msg model =
 
         Acknowledgment (Err error) ->
             let
-                _ =
-                    Debug.log "errror" error
-
                 serverErrors =
                     [ ServerError (decodeError error) ]
             in
@@ -212,6 +228,44 @@ update msg model =
               }
             , Cmd.none
             )
+
+        OpenScreenShareModal ->
+            ( { model | showScreenDialog = True }, Cmd.none )
+
+        CloseScreenShareModal ->
+            ( { model | showScreenDialog = False }, Cmd.none )
+
+        SetSharingOption opt ->
+            let
+                newSharingOption =
+                    Just opt
+            in
+            ( { model
+                | sharingOption = newSharingOption
+                , showScreenDialog = False
+              }
+            , Http.send Acknowledgment <|
+                acknowledgeRequest
+                    { technology = extractTechnology model.clientConfig
+                    , mobileFlag = model.mobile
+                    , state = model.state
+                    , sharingOption = newSharingOption
+                    }
+            )
+
+        StopScreenSharing ->
+            ( { model | sharingOption = Nothing }
+            , Http.send Acknowledgment <|
+                acknowledgeRequest
+                    { technology = extractTechnology model.clientConfig
+                    , mobileFlag = model.mobile
+                    , state = model.state
+                    , sharingOption = Nothing
+                    }
+            )
+
+        NoOp ->
+            ( model, Cmd.none )
 
 
 
@@ -236,6 +290,8 @@ view :
         , timeZone : Time.Zone
         , state : CallState
         , clientConfig : ConfigStatus ClientConfig
+        , showScreenDialog : Bool
+        , sharingOption : Maybe SharingOption
     }
     -> { title : String, content : Html Msg }
 view model =
@@ -259,16 +315,24 @@ view model =
                         [ h1 [ css [ margin zero ] ] [ text <| "Snapview: " ++ stateToString model.state ] ]
                     , div [ css [ Styles.cameraContainter ] ]
                         [ div [ css [ Styles.camera ] ]
-                            [ h1 [ css [ margin zero ] ]
-                                [ text
-                                    ("Camera is off : "
-                                        ++ clientTypeToString clientType
-                                        ++ " "
-                                        ++ technologyToString firstTechnology
-                                    )
-                                ]
+                            [ h1 [ css [ margin zero ] ] [ text "Camera is off " ]
+                            , div [ css [ margin zero ] ] [ text ("ClientType: " ++ clientTypeToString clientType) ]
+                            , div [ css [ margin zero ] ] [ text ("Tech Type: " ++ technologyToString firstTechnology) ]
+                            , case model.sharingOption of
+                                Just _ ->
+                                    div [ css [ margin zero ] ] [ text ("SharingOption: " ++ sharingOptionToString model.sharingOption) ]
+
+                                Nothing ->
+                                    emptyHtml
                             ]
-                        , callBtnPartial model clientType
+                        , callFlowButtonView model clientType
+                        , shareScreenButtonView model
+                        , pauseButtonView model
+                        , Dialog.view
+                            { visible = model.showScreenDialog
+                            , cancelAction = CloseScreenShareModal
+                            , message = Styled.toUnstyled screenSharingModalView
+                            }
                         ]
                     ]
                 ]
@@ -276,31 +340,35 @@ view model =
     }
 
 
-callBtnPartial : { model | state : CallState } -> ClientType -> Html Msg
-callBtnPartial model clientType =
+callFlowButtonView : { model | state : CallState } -> ClientType -> Html Msg
+callFlowButtonView model clientType =
     let
         ( btn, action ) =
             case model.state of
                 Client.Initial ->
                     --Button.view (Button "Start Call" Valid "") (DelayAndChangeState StartAttempt)
-                    ( button [ css [ Styles.startButton ] ] [ text "Start Call" ], DelayAndChangeState StartAttempt )
+                    ( button [ css [ Styles.greenButton ] ] [ text "Start Call" ], DelayAndChangeState StartAttempt )
 
                 Client.StartAttempt ->
-                    --Button.view (Button "..." Valid "") (DelayAndChangeState StartAttempt)
-                    ( button [ css [ Styles.startButton ] ] [ text "..." ], ChangeState StartAttempt )
+                    ( button [ css [ Styles.greenButton ] ] [ text "..." ], ChangeState StartAttempt )
 
                 Client.CallStarted ->
-                    ( button [ css [ Styles.stopButton ] ] [ text "Stop Call" ], ChangeState CallStopped )
+                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallStopped )
+
+                Client.CallPaused ->
+                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallStopped )
+
+                Client.CallUnpaused ->
+                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallStopped )
 
                 Client.CallStopped ->
-                    ( button [ css [ Styles.startButton ] ] [ text "Start Call" ], DelayAndChangeState StartAttempt )
+                    ( button [ css [ Styles.greenButton ] ] [ text "Start Call" ], DelayAndChangeState StartAttempt )
 
                 Client.Loading ->
-                    ( button [ css [ Styles.startButton ] ] [ text "..." ], ChangeState CallStarted )
+                    ( button [ css [ Styles.greenButton ] ] [ text "..." ], ChangeState CallStarted )
 
                 _ ->
-                    --Button.view (Button "test" Button.Loading "") (DelayAndChangeState StartAttempt)
-                    ( button [ css [ Styles.stopButton ] ] [ text "Stop Call" ], ChangeState CallStarted )
+                    ( button [ css [ Styles.redButton ] ] [ text "Stop Call" ], ChangeState CallStarted )
     in
     if clientType == Presenter then
         div [ onClick action ] [ btn ]
@@ -308,6 +376,81 @@ callBtnPartial model clientType =
 
     else
         emptyHtml
+
+
+pauseButtonView :
+    { model
+        | state : CallState
+        , sharingOption : Maybe SharingOption
+    }
+    -> Html Msg
+pauseButtonView model =
+    case model.state of
+        Client.CallStarted ->
+            div [ onClick <| ChangeState CallPaused ] [ button [ css [ Styles.greyButton ] ] [ text "Pause Call" ] ]
+
+        Client.CallPaused ->
+            div [ onClick <| ChangeState CallUnpaused ] [ button [ css [ Styles.greyButton ] ] [ text "Resume Call" ] ]
+
+        Client.CallUnpaused ->
+            div [ onClick <| ChangeState CallPaused ] [ button [ css [ Styles.greyButton ] ] [ text "Pause Call" ] ]
+
+        _ ->
+            emptyHtml
+
+
+shareScreenButtonView :
+    { model
+        | state : CallState
+        , sharingOption : Maybe SharingOption
+    }
+    -> Html Msg
+shareScreenButtonView model =
+    case model.sharingOption of
+        Nothing ->
+            case model.state of
+                Client.CallStarted ->
+                    div []
+                        [ button [ css [ Styles.blueButton ], onClick OpenScreenShareModal ]
+                            [ text "Present now" ]
+                        ]
+
+                Client.CallUnpaused ->
+                    div []
+                        [ button [ css [ Styles.blueButton ], onClick OpenScreenShareModal ]
+                            [ text "Present now" ]
+                        ]
+
+                _ ->
+                    emptyHtml
+
+        Just _ ->
+            case model.state of
+                Client.CallStarted ->
+                    div []
+                        [ button [ css [ Styles.blueButton ], onClick StopScreenSharing ]
+                            [ text "Stop Presenting" ]
+                        ]
+
+                Client.CallUnpaused ->
+                    div []
+                        [ button [ css [ Styles.blueButton ], onClick StopScreenSharing ]
+                            [ text "Stop Presenting" ]
+                        ]
+
+                _ ->
+                    emptyHtml
+
+
+screenSharingModalView : Html Msg
+screenSharingModalView =
+    div []
+        [ span [] [ text "You are about to start Screen sharing:" ]
+        , div [ css [ sharingOptionContainer ] ]
+            [ div [ css [ sharingOptionContent ], onClick <| SetSharingOption Screen ] [ text "Select Screen" ]
+            , div [ css [ sharingOptionContent ], onClick <| SetSharingOption Window ] [ text "Select Window" ]
+            ]
+        ]
 
 
 
