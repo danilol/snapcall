@@ -115,8 +115,8 @@ changeRouteTo maybeRoute model =
             Home.init session
                 |> updateWith Home GotHomeMsg
 
-        Just (Route.Call q1 q2) ->
-            Call.init session q1 q2
+        Just (Route.Call param) ->
+            Call.init session param
                 |> updateWith Call GotCallMsg
 
 

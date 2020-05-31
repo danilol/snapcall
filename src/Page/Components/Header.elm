@@ -15,9 +15,10 @@ import Html.Styled
         )
 import Html.Styled.Attributes exposing (css)
 import Route
-import Styles
+import SharedStyles
     exposing
         ( container
+        , header
         , logo
         )
 
@@ -33,7 +34,7 @@ viewLogo =
 
 view : Html msg
 view =
-    div [ css [ Styles.header ] ]
+    div [ css [ header ] ]
         [ div
             [ css
                 [ container

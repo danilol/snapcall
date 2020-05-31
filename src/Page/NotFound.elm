@@ -16,6 +16,7 @@ import Css
 import Html.Styled
     exposing
         ( Html
+        , a
         , div
         , h2
         , img
@@ -23,10 +24,11 @@ import Html.Styled
         )
 import Html.Styled.Attributes exposing (css, src)
 import Page.Components.Header as Header
-import Styles
+import Route
+import SharedStyles
     exposing
         ( container
-        , resetStyles
+        , simpleButton
         , textCenter
         )
 
@@ -39,7 +41,7 @@ view : { title : String, content : Html msg }
 view =
     { title = "Page Not Found"
     , content =
-        div [ css [ resetStyles ] ]
+        div [ css [] ]
             [ Header.view
             , div [ css [ container, textCenter, marginTop (px 50) ] ]
                 [ h2
@@ -52,6 +54,8 @@ view =
                     ]
                     [ text "Page not found!!" ]
                 , div [ css [ textCenter ] ] [ img [ Asset.src Asset.shit ] [] ]
+                , a [ css [ simpleButton ], Route.href Route.Home ]
+                    [ text "Home Page" ]
                 ]
             ]
     }

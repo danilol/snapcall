@@ -57,24 +57,33 @@ type alias AcknowledgmentMetadata =
 
 type CallState
     = Initial
+    | ConfigLoaded
     | StartAttempt
+    | PauseAttempt
+    | UnpauseAttempt
+    | FinishAttempt
+    | PresentAttempt
+    | StopPresentAttempt
     | CallStarted
     | CallPaused
     | CallUnpaused
     | CallFinished
-    | Loading
+    | PresentStarted
+    | PresentStopped
+    | LoadingConfig
     | Failed
 
 
 type ClientType
     = Presenter
     | Guest
-    | Unknow
+    | Unknown
 
 
 type Technology
     = VNC
     | WebRTC
+    | AnyOther
 
 
 type SharingOption
@@ -111,6 +120,9 @@ technologyDecoder =
                     "WebRTC" ->
                         Decode.succeed WebRTC
 
+                    "AnyOther" ->
+                        Decode.succeed AnyOther
+
                     other ->
                         Decode.fail <| "Unknown technology: " ++ other
             )
@@ -121,12 +133,11 @@ clientTypeDecoder =
     Decode.bool
         |> Decode.andThen
             (\b ->
-                case b of
-                    True ->
-                        Decode.succeed Presenter
+                if b then
+                    Decode.succeed Presenter
 
-                    False ->
-                        Decode.succeed Guest
+                else
+                    Decode.succeed Guest
             )
 
 
@@ -151,6 +162,21 @@ stateDecoder =
                     "StartAttempt" ->
                         Decode.succeed StartAttempt
 
+                    "PauseAttempt" ->
+                        Decode.succeed PauseAttempt
+
+                    "UnpauseAttempt" ->
+                        Decode.succeed UnpauseAttempt
+
+                    "FinishAttempt" ->
+                        Decode.succeed FinishAttempt
+
+                    "PresentAttempt" ->
+                        Decode.succeed PresentAttempt
+
+                    "StopPresentAttempt" ->
+                        Decode.succeed StopPresentAttempt
+
                     "CallStarted" ->
                         Decode.succeed CallStarted
 
@@ -163,8 +189,14 @@ stateDecoder =
                     "CallFinished" ->
                         Decode.succeed CallFinished
 
-                    "Loading" ->
-                        Decode.succeed Loading
+                    "PresentStarted" ->
+                        Decode.succeed PresentStarted
+
+                    "PresentStopped" ->
+                        Decode.succeed PresentStopped
+
+                    "LoadingConfig" ->
+                        Decode.succeed LoadingConfig
 
                     "Failed" ->
                         Decode.succeed Failed
@@ -175,10 +207,10 @@ stateDecoder =
 
 
 
--- API
+-- API calls
 
 
-getConfig : { mobileFlag : Bool, rtcPriority : Bool } -> Http.Request ClientConfig
+getConfig : { mobileFlag : Bool, rtcPriority : Bool, error : Bool } -> Http.Request ClientConfig
 getConfig config =
     Api.get (Endpoint.clientConfig config) configDecoder
 
@@ -223,7 +255,7 @@ clientTypeFromString clientTypeStr =
                     Presenter
 
                 _ ->
-                    Unknow
+                    Unknown
 
 
 clientTypeToString : ClientType -> String
@@ -235,8 +267,8 @@ clientTypeToString clientType =
         Guest ->
             "Guest"
 
-        Unknow ->
-            "Something unexpected just happened!"
+        Unknown ->
+            "Loading"
 
 
 technologyToString : Technology -> String
@@ -248,6 +280,9 @@ technologyToString tech =
         WebRTC ->
             "WebRTC"
 
+        AnyOther ->
+            "Loading"
+
 
 stateToString : CallState -> String
 stateToString state =
@@ -255,8 +290,8 @@ stateToString state =
         Initial ->
             "Initial"
 
-        Loading ->
-            "Loading"
+        LoadingConfig ->
+            "LoadingConfig"
 
         Failed ->
             "Failed"
@@ -273,8 +308,32 @@ stateToString state =
         CallFinished ->
             "CallFinished"
 
+        PresentStarted ->
+            "PresentStarted"
+
+        PresentStopped ->
+            "PresentStopped"
+
         StartAttempt ->
             "StartAttempt"
+
+        PauseAttempt ->
+            "PauseAttempt"
+
+        UnpauseAttempt ->
+            "UnpauseAttempt"
+
+        FinishAttempt ->
+            "FinishAttempt"
+
+        PresentAttempt ->
+            "PresentAttempt"
+
+        StopPresentAttempt ->
+            "StopPresentAttempt"
+
+        ConfigLoaded ->
+            "ConfigLoaded"
 
 
 sharingOptionToString : Maybe SharingOption -> String

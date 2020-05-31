@@ -26,14 +26,14 @@ import Url.Parser.Query as Query
 type Route
     = Root
     | Home
-    | Call (Maybe String) (Maybe String)
+    | Call (Maybe String)
 
 
 parser : Parser (Route -> a) a
 parser =
     oneOf
         [ Parser.map Home Parser.top
-        , Parser.map Call (s "call" <?> Query.string "userType" <?> Query.string "technology")
+        , Parser.map Call (s "call" <?> Query.string "scenario")
         ]
 
 
@@ -75,7 +75,7 @@ routeToString route =
                 Root ->
                     []
 
-                Call userType technology ->
+                Call userType ->
                     case userType of
                         Nothing ->
                             [ "call" ]

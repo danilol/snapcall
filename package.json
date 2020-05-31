@@ -13,7 +13,7 @@
     "analyse:watch": "elm-analyse -s -p 2001",
     "deploy": "gh-pages -d dist",
     "dev": "webpack-dev-server --mode development --port 8080",
-    "mock-server": "json-server db.json"
+    "mock-server": "node server.js"
   },
   "devDependencies": {
     "elm-analyse": "^0.16.5"

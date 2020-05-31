@@ -12,7 +12,6 @@ module Page.Call exposing
 -}
 
 import Api exposing (decodeError)
-import Asset
 import Client
     exposing
         ( AcknowledgmentMetadata
@@ -22,69 +21,41 @@ import Client
         , SharingOption(..)
         , Technology(..)
         , acknowledgeRequest
-        , clientTypeFromString
         , clientTypeToString
         , getConfig
         , sharingOptionToString
         , stateToString
         , technologyToString
         )
-import Css
-    exposing
-        ( color
-        , fontWeight
-        , hex
-        , int
-        , listStyle
-        , margin
-        , marginBottom
-        , marginTop
-        , none
-        , padding
-        , pct
-        , px
-        , width
-        , zero
-        )
 import Html.Styled as Styled
     exposing
         ( Html
-        , button
         , div
         , h1
-        , h2
-        , img
-        , li
-        , p
         , span
-        , tbody
-        , td
         , text
-        , tr
-        , ul
-        , video
         )
-import Html.Styled.Attributes exposing (css, id)
+import Html.Styled.Attributes exposing (css)
 import Html.Styled.Events exposing (onClick)
 import Http
-import Page.Components.Button as Button exposing (Button, State(..))
-import Page.Components.Dialog as Dialog
-import Page.Components.Header as Header
-import Process
-import Session exposing (Session)
-import Styles
+import Page.Call.Control as Control
+import Page.Call.ScenarioConfig as ScenarioConfig
+import Page.Call.Styles
     exposing
-        ( container
-        , resetStyles
-        , shadow
+        ( callContainer
+        , camera
+        , cameraContainter
         , sharingOptionContainer
         , sharingOptionContent
-        , tableStriped
-        , textCenter
         )
+import Page.Components.Button as Button exposing (Config, State(..))
+import Page.Components.Dialog as Dialog
+import Page.Components.Header as Header
+import Session exposing (Session)
+import SharedStyles
 import Task
 import Time
-import Utils.Html exposing (emptyHtml, select)
+import Utils.Html exposing (emptyHtml)
 
 
 
@@ -96,13 +67,19 @@ type alias Model =
     , session : Session
     , problems : List Problem
     , timeZone : Time.Zone
-    , state : CallState
-    , mobile : Bool
+
+    -- config
+    , mobileFlag : Bool
     , clientConfig : ConfigStatus ClientConfig
-    , showScreenDialog : Bool
     , sharingOption : Maybe SharingOption
 
-    --, activeTab : Maybe String
+    --screen control
+    , state : CallState
+    , showScreenDialog : Bool
+    , startButton : Config Msg
+    , finishButton : Config Msg
+    , pauseButton : Config Msg
+    , presentButton : Config Msg
     }
 
 
@@ -125,68 +102,60 @@ mobileFlag = false -> VNC
 Scenario 2:
 guest
 mobileFlag = true -> VNC
-/call?userType=guest
+/call?scenario=guest
 
 Scenario 3:
 presenter
 mobileFlag = false -> WebRTC
-/call?technology=WebRTC
+/call?scenario=WebRTC
 
 Scenario 4:
 guest
 mobileFlag = false -> WebRTC
-/call?technology=WebRTC
+/call?scenario=WebRTC
 
 Scenario 5:
 presenter
 mobileFlag = false -> VNC
-/call?technology=WebRTC
+/call?scenario=error
 ERROR
 
 -}
-init : Session -> Maybe String -> Maybe String -> ( Model, Cmd Msg )
-init session guestParam technologyParam =
+init : Session -> Maybe String -> ( Model, Cmd Msg )
+init session scenarioParam =
     let
-        mobile =
-            case guestParam of
-                --  if has param => Guest else => Presenter
-                Nothing ->
-                    False
+        scenarioConfig =
+            ScenarioConfig.prepare scenarioParam
 
-                Just _ ->
-                    True
-
-        rtc =
-            case technologyParam of
-                --  if has param => WebRTC else => VNC
-                Nothing ->
-                    False
-
-                Just _ ->
-                    True
-
+        -- if mobileFlag starts the call right away
         ( state, sharingOption ) =
-            if mobile then
+            if scenarioConfig.mobileFlag then
                 ( CallStarted, Just Mobile )
 
             else
-                ( Initial, Nothing )
+                ( Client.LoadingConfig, Nothing )
     in
     ( { title = "Snapview call"
       , session = session
       , problems = []
-      , state = state
       , timeZone = Time.utc
-      , mobile = mobile
+
+      -- config
+      , mobileFlag = scenarioConfig.mobileFlag
       , clientConfig = ConfigInitial
       , sharingOption = sharingOption
 
       -- screen control
+      , state = state
       , showScreenDialog = False
+      , startButton = Control.initialStartButton StartCall
+      , pauseButton = Control.initialPauseButton PauseCall
+      , finishButton = Control.initialFinishButton FinishCall
+      , presentButton = Control.initialPresentButton OpenScreenShareModal
       }
     , Cmd.batch
         [ Task.perform GotTimeZone Time.here
-        , Http.send RequestConfig <| getConfig { mobileFlag = mobile, rtcPriority = rtc }
+        , Http.send RequestConfig <| getConfig scenarioConfig
         ]
     )
 
@@ -198,14 +167,15 @@ init session guestParam technologyParam =
 type Msg
     = GotTimeZone Time.Zone
     | RequestConfig (Result Http.Error ClientConfig)
-    | ChangeState CallState
-    | DelayAndChangeState CallState
-    | Acknowledgment (Result Http.Error AcknowledgmentMetadata)
+    | Acknowledge (Result Http.Error AcknowledgmentMetadata)
     | OpenScreenShareModal
     | CloseScreenShareModal
-    | SetSharingOption SharingOption
-    | StopScreenSharing
-    | NoOp
+    | StartSharing SharingOption
+    | StartCall
+    | PauseCall
+    | UnpauseCall
+    | FinishCall
+    | StopSharing
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -215,64 +185,309 @@ update msg model =
             ( { model | timeZone = tz }, Cmd.none )
 
         RequestConfig (Ok config) ->
-            ( { model | clientConfig = ConfigSuccess config }, Cmd.none )
+            let
+                newStartBtn =
+                    updateButtonState
+                        { oldBtn = model.startButton
+                        , newState = Button.Enabled
+                        , newLabel = model.startButton.label
+                        , onClick = model.startButton.onClick
+                        }
+            in
+            ( { model
+                | clientConfig = ConfigSuccess config
+                , startButton = newStartBtn
+                , state = Client.Initial
+              }
+            , Cmd.none
+            )
 
         RequestConfig (Err error) ->
             let
                 serverErrors =
                     [ ServerError (decodeError error) ]
+
+                newStartBtn =
+                    updateButtonState
+                        { oldBtn = model.startButton
+                        , newState = Button.Enabled
+                        , newLabel = model.startButton.label
+                        , onClick = model.startButton.onClick
+                        }
             in
             ( { model
                 | clientConfig = ConfigFailed
                 , problems = serverErrors
+                , startButton = newStartBtn
                 , state = Failed
               }
             , Cmd.none
             )
 
-        DelayAndChangeState state ->
-            ( { model | state = Client.Loading }
-              -- to give the load effect
-            , Process.sleep 2000
-                |> Task.perform (always (ChangeState state))
+        StartCall ->
+            let
+                state =
+                    StartAttempt
+
+                newStartBtn =
+                    updateButtonState
+                        { oldBtn = model.startButton
+                        , newState = Button.Loading
+                        , newLabel = model.startButton.label
+                        , onClick = model.startButton.onClick
+                        }
+            in
+            ( { model
+                | state = state
+                , startButton = newStartBtn
+              }
+            , acknowledgeCmd
+                { technology = extractTechnology model.clientConfig
+                , sharingOption = model.sharingOption
+                , state = state
+                , mobileFlag = model.mobileFlag
+                }
             )
 
-        ChangeState state ->
+        PauseCall ->
             let
-                cmd =
-                    Http.send Acknowledgment <|
-                        acknowledgeRequest
-                            { technology = extractTechnology model.clientConfig
-                            , mobileFlag = False
-                            , state = state
-                            , sharingOption = model.sharingOption
-                            }
-            in
-            ( { model | state = state }, cmd )
+                state =
+                    PauseAttempt
 
-        Acknowledgment (Ok acknowledge) ->
+                newPauseBtn =
+                    updateButtonState
+                        { oldBtn = model.pauseButton
+                        , newState = Button.Loading
+                        , newLabel = "Unpause"
+                        , onClick = UnpauseCall
+                        }
+            in
+            ( { model | state = state, pauseButton = newPauseBtn }
+            , acknowledgeCmd
+                { technology = extractTechnology model.clientConfig
+                , sharingOption = model.sharingOption
+                , state = state
+                , mobileFlag = model.mobileFlag
+                }
+            )
+
+        UnpauseCall ->
             let
-                st =
+                state =
+                    UnpauseAttempt
+
+                newPauseBtn =
+                    updateButtonState
+                        { oldBtn = model.pauseButton
+                        , newState = Button.Loading
+                        , newLabel = "Pause"
+                        , onClick = PauseCall
+                        }
+            in
+            ( { model | state = state, pauseButton = newPauseBtn }
+            , acknowledgeCmd
+                { technology = extractTechnology model.clientConfig
+                , mobileFlag = model.mobileFlag
+                , state = state
+                , sharingOption = model.sharingOption
+                }
+            )
+
+        FinishCall ->
+            let
+                state =
+                    FinishAttempt
+
+                newFinishButton =
+                    updateButtonState
+                        { oldBtn = model.finishButton
+                        , newState = Button.Loading
+                        , newLabel = model.finishButton.label
+                        , onClick = model.finishButton.onClick
+                        }
+            in
+            ( { model
+                | state = state
+                , pauseButton = Control.initialPauseButton PauseCall
+                , presentButton = Control.initialPresentButton OpenScreenShareModal
+                , finishButton = newFinishButton
+                , sharingOption = Nothing
+              }
+            , acknowledgeCmd
+                { technology = extractTechnology model.clientConfig
+                , sharingOption = model.sharingOption
+                , state = state
+                , mobileFlag = model.mobileFlag
+                }
+            )
+
+        StartSharing opt ->
+            let
+                newSharingOption =
+                    Just opt
+
+                state =
+                    PresentAttempt
+
+                newPresentButton =
+                    updateButtonState
+                        { oldBtn = model.presentButton
+                        , newState = Button.Loading
+                        , newLabel = "Stop Sharing"
+                        , onClick = model.presentButton.onClick
+                        }
+            in
+            ( { model
+                | sharingOption = newSharingOption
+                , showScreenDialog = False
+                , presentButton = newPresentButton
+                , state = state
+              }
+            , acknowledgeCmd
+                { technology = extractTechnology model.clientConfig
+                , mobileFlag = model.mobileFlag
+                , state = state
+                , sharingOption = newSharingOption
+                }
+            )
+
+        StopSharing ->
+            let
+                state =
+                    StopPresentAttempt
+
+                newPresentButton =
+                    updateButtonState
+                        { oldBtn = model.presentButton
+                        , newState = Button.Enabled
+                        , newLabel = "Present Now"
+                        , onClick = OpenScreenShareModal
+                        }
+            in
+            ( { model
+                | sharingOption = Nothing
+                , showScreenDialog = False
+                , presentButton = newPresentButton
+              }
+            , acknowledgeCmd
+                { technology = extractTechnology model.clientConfig
+                , mobileFlag = model.mobileFlag
+                , state = state
+                , sharingOption = Nothing
+                }
+            )
+
+        Acknowledge (Ok acknowledge) ->
+            let
+                newState =
                     case acknowledge.state of
                         StartAttempt ->
                             CallStarted
 
+                        PauseAttempt ->
+                            CallPaused
+
+                        UnpauseAttempt ->
+                            CallUnpaused
+
+                        FinishAttempt ->
+                            CallFinished
+
+                        PresentAttempt ->
+                            PresentStarted
+
                         _ ->
                             acknowledge.state
-            in
-            ( { model | state = st }, Cmd.none )
 
-        Acknowledgment (Err error) ->
+                newStartBtn =
+                    updateButtonState
+                        { oldBtn = model.startButton
+                        , newState = Button.Enabled
+                        , newLabel = model.startButton.label
+                        , onClick = model.startButton.onClick
+                        }
+
+                newPauseBtn =
+                    updateButtonState
+                        { oldBtn = model.pauseButton
+                        , newState = Button.Enabled
+                        , newLabel = model.pauseButton.label
+                        , onClick =
+                            if newState == PauseAttempt then
+                                UnpauseCall
+
+                            else
+                                model.pauseButton.onClick
+                        }
+
+                newFinishButton =
+                    updateButtonState
+                        { oldBtn = model.finishButton
+                        , newState = Button.Enabled
+                        , newLabel = model.finishButton.label
+                        , onClick = model.finishButton.onClick
+                        }
+
+                newPresentButton =
+                    updateButtonState
+                        { oldBtn = model.presentButton
+                        , newState = Button.Enabled
+                        , newLabel = model.presentButton.label
+                        , onClick =
+                            if newState == PresentStarted then
+                                StopSharing
+
+                            else
+                                model.presentButton.onClick
+                        }
+            in
+            ( { model
+                | state = newState
+                , startButton = newStartBtn
+                , pauseButton = newPauseBtn
+                , presentButton = newPresentButton
+                , finishButton = newFinishButton
+              }
+            , Cmd.none
+            )
+
+        Acknowledge (Err error) ->
             let
                 serverErrors =
                     [ ServerError (decodeError error) ]
+
+                -- work around for retry
+                -- if config request was successfull that means we have
+                -- the tecnologies, so we can try one more time
+                ( newClientConfig, retryCmd ) =
+                    case model.clientConfig of
+                        ConfigSuccess oldConfig ->
+                            let
+                                --work around to get the next technology of the list
+                                newTechnologies =
+                                    List.drop 1 oldConfig.technologies
+
+                                newConfig =
+                                    ConfigSuccess { oldConfig | technologies = newTechnologies }
+                            in
+                            ( newConfig
+                            , acknowledgeCmd
+                                { technology = extractTechnology newConfig
+                                , sharingOption = model.sharingOption
+                                , state = model.state
+                                , mobileFlag = model.mobileFlag
+                                }
+                            )
+
+                        _ ->
+                            ( ConfigFailed, Cmd.none )
             in
             ( { model
-                | clientConfig = ConfigFailed
+                | clientConfig = newClientConfig
                 , state = Failed
                 , problems = serverErrors
               }
-            , Cmd.none
+            , retryCmd
             )
 
         OpenScreenShareModal ->
@@ -280,38 +495,6 @@ update msg model =
 
         CloseScreenShareModal ->
             ( { model | showScreenDialog = False }, Cmd.none )
-
-        SetSharingOption opt ->
-            let
-                newSharingOption =
-                    Just opt
-            in
-            ( { model
-                | sharingOption = newSharingOption
-                , showScreenDialog = False
-              }
-            , Http.send Acknowledgment <|
-                acknowledgeRequest
-                    { technology = extractTechnology model.clientConfig
-                    , mobileFlag = model.mobile
-                    , state = model.state
-                    , sharingOption = newSharingOption
-                    }
-            )
-
-        StopScreenSharing ->
-            ( { model | sharingOption = Nothing }
-            , Http.send Acknowledgment <|
-                acknowledgeRequest
-                    { technology = extractTechnology model.clientConfig
-                    , mobileFlag = model.mobile
-                    , state = model.state
-                    , sharingOption = Nothing
-                    }
-            )
-
-        NoOp ->
-            ( model, Cmd.none )
 
 
 
@@ -325,7 +508,6 @@ toSession model =
 
 
 
--- HTTP
 -- VIEW
 
 
@@ -338,6 +520,10 @@ view :
         , clientConfig : ConfigStatus ClientConfig
         , showScreenDialog : Bool
         , sharingOption : Maybe SharingOption
+        , startButton : Button.Config Msg
+        , pauseButton : Button.Config Msg
+        , finishButton : Button.Config Msg
+        , presentButton : Button.Config Msg
     }
     -> { title : String, content : Html Msg }
 view model =
@@ -347,61 +533,29 @@ view model =
 
         firstTechnology =
             extractTechnology model.clientConfig
-
-        isSharing =
-            case model.sharingOption of
-                Just _ ->
-                    True
-
-                Nothing ->
-                    False
-
-        stateText =
-            case model.state of
-                Initial ->
-                    "Click to start the call"
-
-                Client.Loading ->
-                    "Loading..."
-
-                Client.CallPaused ->
-                    "Transmition Paused..."
-
-                Client.CallFinished ->
-                    "Click to start a new call"
-
-                _ ->
-                    if isSharing then
-                        "You are " ++ sharingOptionToString model.sharingOption
-
-                    else
-                        "Your are sharing your camera and it's off..."
     in
     { title = model.title
     , content =
-        div [ css [ resetStyles ] ]
+        div [ css [] ]
             [ Header.view
             , div
-                [ css [ container, marginTop (px 50) ] ]
-                [ div [ css [ shadow ] ]
+                [ css [ callContainer ] ]
+                [ div [ css [ SharedStyles.shadow ] ]
                     [ div
-                        [ css [ Styles.dataHeader ]
+                        [ css [ SharedStyles.dataHeader ]
                         ]
-                        [ h1 [ css [ margin zero ] ] [ text <| "Snapview: " ++ stateToString model.state ] ]
-                    , div [ css [ Styles.cameraContainter ] ]
-                        [ div [ css [ Styles.camera ] ]
-                            [ h1 [ css [ margin zero ] ] [ text stateText ]
-                            , div [ css [ margin zero ] ] [ text ("ClientType: " ++ clientTypeToString clientType) ]
-                            , div [ css [ margin zero ] ] [ text ("Tech Type: " ++ technologyToString firstTechnology) ]
-                            , if isSharing then
-                                div [ css [ margin zero ] ] [ text ("Selection Name: " ++ sharingOptionToString model.sharingOption) ]
-
-                              else
-                                emptyHtml
+                        [ h1 [] [ text <| "Snapview: " ++ stateToString model.state ] ]
+                    , div [ css [ cameraContainter ] ]
+                        [ div [ css [ camera ] ]
+                            [ stateDisplayText model
+                            , div [] [ text ("ClientType: " ++ clientTypeToString clientType) ]
+                            , div [] [ text ("Tech Type: " ++ technologyToString firstTechnology) ]
+                            , screenSelectionDisplayText model
                             ]
-                        , callFlowButtonView model clientType
-                        , shareScreenButtonView model clientType
-                        , pauseButtonView model
+                        , Control.startButton model
+                        , Control.pauseButton model
+                        , Control.finishButton model
+                        , Control.presentButton model
                         , Dialog.view
                             { visible = model.showScreenDialog
                             , cancelAction = CloseScreenShareModal
@@ -414,112 +568,57 @@ view model =
     }
 
 
-callFlowButtonView : { model | state : CallState } -> ClientType -> Html Msg
-callFlowButtonView model clientType =
+stateDisplayText : { model | state : CallState, sharingOption : Maybe SharingOption } -> Html Msg
+stateDisplayText model =
     let
-        ( btn, action ) =
+        isSharing =
+            case model.sharingOption of
+                Just _ ->
+                    True
+
+                Nothing ->
+                    False
+
+        displayText =
             case model.state of
-                Client.Initial ->
-                    --Button.view (Button "Start Call" Valid "") (DelayAndChangeState StartAttempt)
-                    ( button [ css [ Styles.greenButton ] ] [ text "Start Call" ], DelayAndChangeState StartAttempt )
+                Initial ->
+                    "Click to start the call"
 
-                Client.StartAttempt ->
-                    ( button [ css [ Styles.greenButton ] ] [ text "..." ], ChangeState StartAttempt )
-
-                Client.CallStarted ->
-                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallFinished )
+                Client.LoadingConfig ->
+                    "LoadingConfig..."
 
                 Client.CallPaused ->
-                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallFinished )
-
-                Client.CallUnpaused ->
-                    ( button [ css [ Styles.redButton ] ] [ text "Finish Call" ], ChangeState CallFinished )
+                    "Transmition Paused..."
 
                 Client.CallFinished ->
-                    ( button [ css [ Styles.greenButton ] ] [ text "Start Call" ], DelayAndChangeState StartAttempt )
+                    "Click to start a new call"
 
-                Client.Loading ->
-                    ( button [ css [ Styles.greenButton ] ] [ text "..." ], ChangeState CallStarted )
+                Client.StartAttempt ->
+                    "LoadingConfig..."
 
                 _ ->
-                    ( button [ css [ Styles.redButton ] ] [ text "Stop Call" ], ChangeState CallStarted )
+                    if isSharing then
+                        "You are " ++ sharingOptionToString model.sharingOption
+
+                    else
+                        "You're sharing your camera and it's off..."
     in
-    if clientType == Presenter then
-        div [ onClick action ] [ btn ]
-        --btn
-
-    else
-        emptyHtml
+    h1 [ css [] ] [ text displayText ]
 
 
-pauseButtonView :
-    { model
-        | state : CallState
-        , sharingOption : Maybe SharingOption
-    }
-    -> Html Msg
-pauseButtonView model =
-    case model.state of
-        Client.CallStarted ->
-            div [ onClick <| ChangeState CallPaused ] [ button [ css [ Styles.greyButton ] ] [ text "Pause Call" ] ]
-
-        Client.CallPaused ->
-            div [ onClick <| ChangeState CallUnpaused ] [ button [ css [ Styles.greyButton ] ] [ text "Resume Call" ] ]
-
-        Client.CallUnpaused ->
-            div [ onClick <| ChangeState CallPaused ] [ button [ css [ Styles.greyButton ] ] [ text "Pause Call" ] ]
-
-        _ ->
-            emptyHtml
-
-
-shareScreenButtonView :
-    { model
-        | state : CallState
-        , sharingOption : Maybe SharingOption
-    }
-    -> ClientType
-    -> Html Msg
-shareScreenButtonView model clientType =
+screenSelectionDisplayText : { model | sharingOption : Maybe SharingOption } -> Html Msg
+screenSelectionDisplayText model =
     let
-        content =
+        isSharing =
             case model.sharingOption of
-                Nothing ->
-                    case model.state of
-                        Client.CallStarted ->
-                            div []
-                                [ button [ css [ Styles.blueButton ], onClick OpenScreenShareModal ]
-                                    [ text "Present now" ]
-                                ]
-
-                        Client.CallUnpaused ->
-                            div []
-                                [ button [ css [ Styles.blueButton ], onClick OpenScreenShareModal ]
-                                    [ text "Present now" ]
-                                ]
-
-                        _ ->
-                            emptyHtml
-
                 Just _ ->
-                    case model.state of
-                        Client.CallStarted ->
-                            div []
-                                [ button [ css [ Styles.blueButton ], onClick StopScreenSharing ]
-                                    [ text "Stop Presenting" ]
-                                ]
+                    True
 
-                        Client.CallUnpaused ->
-                            div []
-                                [ button [ css [ Styles.blueButton ], onClick StopScreenSharing ]
-                                    [ text "Stop Presenting" ]
-                                ]
-
-                        _ ->
-                            emptyHtml
+                Nothing ->
+                    False
     in
-    if clientType == Presenter then
-        content
+    if isSharing then
+        div [ css [] ] [ text ("Selection Name: " ++ sharingOptionToString model.sharingOption) ]
 
     else
         emptyHtml
@@ -528,73 +627,61 @@ shareScreenButtonView model clientType =
 screenSharingModalView : Technology -> Html Msg
 screenSharingModalView technology =
     case technology of
-        VNC ->
-            div []
-                [ span [] [ text "You are about to start Screen sharing:" ]
-                , div [ css [ sharingOptionContainer ] ]
-                    [ div [ css [ sharingOptionContent ], onClick <| SetSharingOption Screen ] [ text "Select Screen" ]
-                    , div [ css [ sharingOptionContent ], onClick <| SetSharingOption Window ] [ text "Select Window" ]
-                    ]
-                ]
-
         WebRTC ->
             div []
                 [ span [] [ text "You are about to start Screen sharing:" ]
                 , div [ css [ sharingOptionContainer ] ]
-                    [ div [ css [ sharingOptionContent ], onClick <| SetSharingOption Screen ] [ text "Select Screen" ]
+                    [ div [ css [ sharingOptionContent ], onClick <| StartSharing Screen ] [ text "Select Screen" ]
                     ]
                 ]
 
-
-
--- ERRORS view
-
-
-viewProblems : { model | problems : List Problem } -> Html msg
-viewProblems model =
-    div
-        [ css
-            [ container
-            , textCenter
-            , marginTop (px 50)
-            ]
-        ]
-        [ ul
-            [ css
-                [ margin zero
-                , padding zero
-                , listStyle none
+        VNC ->
+            div []
+                [ span [] [ text "You are about to start Screen sharing:" ]
+                , div [ css [ sharingOptionContainer ] ]
+                    [ div [ css [ sharingOptionContent ], onClick <| StartSharing Screen ] [ text "Select Screen" ]
+                    , div [ css [ sharingOptionContent ], onClick <| StartSharing Window ] [ text "Select Window" ]
+                    ]
                 ]
-            ]
-            (List.map viewProblem model.problems)
-        , img [ Asset.src Asset.error, css [ width (px 300) ] ] []
-        ]
+
+        AnyOther ->
+            emptyHtml
 
 
-viewProblem : Problem -> Html msg
-viewProblem problem =
-    let
-        errorMessage =
-            case problem of
-                ServerError str ->
-                    str
-    in
-    li []
-        [ h2
-            [ css
-                [ margin zero
-                , marginBottom (px 60)
-                , color (hex "3398cc")
-                , fontWeight (int 400)
-                ]
-            ]
-            [ text errorMessage
-            ]
-        ]
+
+-- HTTP
+
+
+acknowledgeCmd :
+    { technology : Technology
+    , sharingOption : Maybe SharingOption
+    , state : CallState
+    , mobileFlag : Bool
+    }
+    -> Cmd Msg
+acknowledgeCmd { technology, sharingOption, state, mobileFlag } =
+    Http.send Acknowledge <|
+        acknowledgeRequest
+            { technology = technology
+            , mobileFlag = mobileFlag
+            , state = state
+            , sharingOption = sharingOption
+            }
 
 
 
 -- HELPERS
+
+
+updateButtonState :
+    { oldBtn : Button.Config Msg
+    , newState : Button.State
+    , newLabel : String
+    , onClick : Msg
+    }
+    -> Button.Config Msg
+updateButtonState { oldBtn, newState, newLabel, onClick } =
+    { oldBtn | state = newState, label = newLabel, onClick = onClick }
 
 
 extractTechnology : ConfigStatus ClientConfig -> Technology
@@ -604,7 +691,7 @@ extractTechnology config =
             Maybe.withDefault VNC (List.head a.technologies)
 
         _ ->
-            VNC
+            AnyOther
 
 
 extractClientType : ConfigStatus ClientConfig -> ClientType
@@ -614,4 +701,4 @@ extractClientType config =
             a.type_
 
         _ ->
-            Guest
+            Unknown
