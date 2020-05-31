@@ -1,5 +1,35 @@
 module Page.Call.ScenarioConfig exposing (prepare)
 
+{-| The scenarios configuration.
+
+Scenario 1:
+presenter
+mobileFlag = false -> VNC
+/call
+
+Scenario 2:
+guest
+mobileFlag = true -> VNC
+/call?scenario=guest
+
+Scenario 3:
+presenter
+mobileFlag = false -> WebRTC
+/call?scenario=WebRTC
+
+Scenario 4:
+guest
+mobileFlag = false -> WebRTC
+/call?scenario=WebRTC
+
+Scenario 5:
+presenter
+mobileFlag = false -> VNC
+/call?scenario=error
+ERROR
+
+-}
+
 
 prepare : Maybe String -> { error : Bool, mobileFlag : Bool, rtcPriority : Bool }
 prepare scenarioParam =

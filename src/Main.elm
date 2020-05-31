@@ -177,8 +177,8 @@ subscriptions model =
         Home _ ->
             Sub.none
 
-        Call _ ->
-            Sub.none
+        Call call ->
+            Sub.map GotCallMsg <| Call.subscriptions call
 
 
 
