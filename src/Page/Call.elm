@@ -3,6 +3,7 @@ module Page.Call exposing
     , Msg
     , Problem(..)
     , init
+    , subscriptions
     , toSession
     , update
     , view
@@ -32,6 +33,7 @@ import Html.Styled as Styled
         ( Html
         , div
         , h1
+        , map
         , span
         , text
         )
@@ -55,6 +57,7 @@ import Session exposing (Session)
 import SharedStyles
 import Task
 import Time
+import Utils.Chrono as Chrono
 import Utils.Html exposing (emptyHtml)
 
 
@@ -67,6 +70,8 @@ type alias Model =
     , session : Session
     , problems : List Problem
     , timeZone : Time.Zone
+    , chrono : Chrono.Model
+    , timeCallStarted : Maybe Time.Posix
 
     -- config
     , mobileFlag : Bool
@@ -93,34 +98,6 @@ type ConfigStatus a
     | ConfigFailed
 
 
-{-| Scenarios :
-Scenario 1:
-presenter
-mobileFlag = false -> VNC
-/call
-
-Scenario 2:
-guest
-mobileFlag = true -> VNC
-/call?scenario=guest
-
-Scenario 3:
-presenter
-mobileFlag = false -> WebRTC
-/call?scenario=WebRTC
-
-Scenario 4:
-guest
-mobileFlag = false -> WebRTC
-/call?scenario=WebRTC
-
-Scenario 5:
-presenter
-mobileFlag = false -> VNC
-/call?scenario=error
-ERROR
-
--}
 init : Session -> Maybe String -> ( Model, Cmd Msg )
 init session scenarioParam =
     let
@@ -134,11 +111,16 @@ init session scenarioParam =
 
             else
                 ( Client.LoadingConfig, Nothing )
+
+        ( chronoModel, chronoCmd ) =
+            Chrono.init
     in
     ( { title = "Snapview call"
       , session = session
       , problems = []
       , timeZone = Time.utc
+      , chrono = chronoModel
+      , timeCallStarted = Nothing
 
       -- config
       , mobileFlag = scenarioConfig.mobileFlag
@@ -154,8 +136,8 @@ init session scenarioParam =
       , presentButton = Control.initialPresentButton OpenScreenShareModal
       }
     , Cmd.batch
-        [ Task.perform GotTimeZone Time.here
-        , Http.send RequestConfig <| getConfig scenarioConfig
+        [ Http.send RequestConfig <| getConfig scenarioConfig
+        , Cmd.map GotChronoMsg chronoCmd
         ]
     )
 
@@ -165,8 +147,7 @@ init session scenarioParam =
 
 
 type Msg
-    = GotTimeZone Time.Zone
-    | RequestConfig (Result Http.Error ClientConfig)
+    = RequestConfig (Result Http.Error ClientConfig)
     | Acknowledge (Result Http.Error AcknowledgmentMetadata)
     | OpenScreenShareModal
     | CloseScreenShareModal
@@ -176,14 +157,12 @@ type Msg
     | UnpauseCall
     | FinishCall
     | StopSharing
+    | GotChronoMsg Chrono.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        GotTimeZone tz ->
-            ( { model | timeZone = tz }, Cmd.none )
-
         RequestConfig (Ok config) ->
             let
                 newStartBtn =
@@ -241,12 +220,15 @@ update msg model =
                 | state = state
                 , startButton = newStartBtn
               }
-            , acknowledgeCmd
-                { technology = extractTechnology model.clientConfig
-                , sharingOption = model.sharingOption
-                , state = state
-                , mobileFlag = model.mobileFlag
-                }
+            , Cmd.batch
+                [ acknowledgeCmd
+                    { technology = extractTechnology model.clientConfig
+                    , sharingOption = model.sharingOption
+                    , state = state
+                    , mobileFlag = model.mobileFlag
+                    }
+                , Cmd.none
+                ]
             )
 
         PauseCall ->
@@ -444,6 +426,17 @@ update msg model =
                             else
                                 model.presentButton.onClick
                         }
+
+                ( chronoModel, chronoCmd ) =
+                    case acknowledge.state of
+                        StartAttempt ->
+                            Chrono.start model.chrono
+
+                        FinishAttempt ->
+                            Chrono.stop model.chrono
+
+                        _ ->
+                            ( model.chrono, Cmd.none )
             in
             ( { model
                 | state = newState
@@ -451,8 +444,9 @@ update msg model =
                 , pauseButton = newPauseBtn
                 , presentButton = newPresentButton
                 , finishButton = newFinishButton
+                , chrono = chronoModel
               }
-            , Cmd.none
+            , Cmd.map GotChronoMsg chronoCmd
             )
 
         Acknowledge (Err error) ->
@@ -500,9 +494,26 @@ update msg model =
         CloseScreenShareModal ->
             ( { model | showScreenDialog = False }, Cmd.none )
 
+        GotChronoMsg chronoMsg ->
+            let
+                ( chronoModel, chronoCmd ) =
+                    Chrono.update chronoMsg model.chrono
+            in
+            ( { model | chrono = chronoModel }
+            , Cmd.map GotChronoMsg chronoCmd
+            )
+
 
 
 -- SUBSCRIPTIONS
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Sub.map GotChronoMsg <| Chrono.subscriptions model.chrono
+
+
+
 -- EXPORT
 
 
@@ -528,6 +539,7 @@ view :
         , pauseButton : Button.Config Msg
         , finishButton : Button.Config Msg
         , presentButton : Button.Config Msg
+        , chrono : Chrono.Model
     }
     -> { title : String, content : Html Msg }
 view model =
@@ -555,6 +567,7 @@ view model =
                             , div [] [ text ("ClientType: " ++ clientTypeToString clientType) ]
                             , div [] [ text ("Tech Type: " ++ technologyToString firstTechnology) ]
                             , screenSelectionDisplayText model
+                            , Styled.map GotChronoMsg <| Chrono.view model.chrono
                             ]
                         , Control.startButton model
                         , Control.pauseButton model
