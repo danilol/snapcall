@@ -17,17 +17,11 @@ import Css
         , backgroundColor
         , center
         , fontSize
-        , fontWeight
         , height
         , hex
-        , int
-        , lineHeight
         , margin
         , marginBottom
-        , marginRight
-        , num
         , px
-        , rem
         , vh
         , width
         , zero
@@ -40,19 +34,16 @@ import Html.Styled
         , h1
         , h2
         , img
-        , p
         , text
         )
 import Html.Styled.Attributes exposing (css, href)
 import Route
 import Session exposing (Session)
-import Styles
+import SharedStyles
     exposing
-        ( buttonHome
-        , buttonLarge
-        , container
+        ( container
         , heroContainer
-        , resetStyles
+        , simpleButton
         )
 
 
@@ -81,7 +72,7 @@ view : { model | title : String } -> { title : String, content : Html Msg }
 view model =
     { title = model.title
     , content =
-        div [ css [ resetStyles, backgroundColor (hex "f9ffeb") ] ]
+        div [ css [ backgroundColor (hex "f9ffeb") ] ]
             [ viewHero
             ]
     }
@@ -104,25 +95,9 @@ viewHero =
         ]
         [ div []
             [ viewLogo
-            , h1 [ css [ fontSize (px 48), margin zero ] ] [ text "EEA" ]
-            , h2 [] [ text "Elm Example App" ]
-            , p
-                [ css
-                    [ fontSize (rem 1.25)
-                    , lineHeight (num 1.5)
-                    , fontWeight (int 200)
-                    ]
-                ]
-                [ text "Boiler plate for an elm 0.19 app with weback loader config" ]
-            , a
-                [ css
-                    [ Styles.greenButton
-                    , buttonLarge
-                    , buttonHome
-                    , marginRight (px 15)
-                    ]
-                , Route.href (Route.Call Nothing Nothing)
-                ]
+            , h1 [ css [ fontSize (px 48), margin zero ] ] [ text "SnapCall" ]
+            , h2 [] [ text "Snapview code challenge" ]
+            , a [ css [ simpleButton ], Route.href (Route.Call Nothing) ]
                 [ text "Join the Call" ]
             ]
         , div []

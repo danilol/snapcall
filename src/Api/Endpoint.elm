@@ -70,16 +70,20 @@ url api paths queryParams =
 -- if it's mobile, RTC first, Mobile, etc
 
 
-clientConfig : { mobileFlag : Bool, rtcPriority : Bool } -> Endpoint
-clientConfig { mobileFlag, rtcPriority } =
-    case ( rtcPriority, mobileFlag ) of
-        ( True, _ ) ->
+clientConfig : { mobileFlag : Bool, rtcPriority : Bool, error : Bool } -> Endpoint
+clientConfig { mobileFlag, rtcPriority, error } =
+    case ( rtcPriority, mobileFlag, error ) of
+        ( True, _, _ ) ->
             -- clients/3 config in db.json
             url MockServer [ "clients", "3" ] []
 
-        ( _, True ) ->
+        ( _, True, _ ) ->
             -- clients/2 config in db.json
             url MockServer [ "clients", "2" ] []
+
+        ( _, _, True ) ->
+            -- clients/5 config in db.json
+            url MockServer [ "clients", "5" ] []
 
         _ ->
             -- clients/1 config in db.json
