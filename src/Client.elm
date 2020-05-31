@@ -57,20 +57,20 @@ type alias AcknowledgmentMetadata =
 
 type CallState
     = Initial
+    | LoadingConfig
     | ConfigLoaded
     | StartAttempt
-    | PauseAttempt
-    | UnpauseAttempt
-    | FinishAttempt
-    | PresentAttempt
-    | StopPresentAttempt
     | CallStarted
+    | PauseAttempt
     | CallPaused
+    | UnpauseAttempt
     | CallUnpaused
+    | FinishAttempt
     | CallFinished
+    | PresentAttempt
     | PresentStarted
+    | StopPresentAttempt
     | PresentStopped
-    | LoadingConfig
     | Failed
 
 

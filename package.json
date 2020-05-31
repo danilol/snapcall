@@ -6,8 +6,7 @@
   "private": true,
   "scripts": {
     "test": "elm-test",
-    "start": "webpack-dev-server --mode development --port 8080",
-    "server": "webpack-dev-server --mode development --port 8080",
+    "start": "concurrently \"webpack-dev-server --mode development --port 8080\" \"yarn mock-server\"",
     "build:release": "ENV=production webpack --env.production",
     "analyse": "elm-analyse",
     "analyse:watch": "elm-analyse -s -p 2001",
@@ -19,6 +18,7 @@
     "elm-analyse": "^0.16.5"
   },
   "dependencies": {
+    "concurrently": "^5.2.0",
     "copy-webpack-plugin": "^5.0.1",
     "elm": "^0.19.1",
     "elm-format": "^0.8.1",

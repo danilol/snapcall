@@ -70,10 +70,10 @@ initialPresentButton msg =
 startButton : { model | startButton : Button.Config msg, state : CallState } -> Html msg
 startButton model =
     case model.state of
-        Initial ->
+        LoadingConfig ->
             Button.view model.startButton
 
-        LoadingConfig ->
+        ConfigLoaded ->
             Button.view model.startButton
 
         StartAttempt ->
@@ -107,6 +107,9 @@ pauseButton model =
         PresentStarted ->
             Button.view model.pauseButton
 
+        PresentStopped ->
+            Button.view model.pauseButton
+
         _ ->
             emptyHtml
 
@@ -126,7 +129,7 @@ finishButton model =
         PresentStarted ->
             Button.view model.finishButton
 
-        StopPresentAttempt ->
+        PresentStopped ->
             Button.view model.finishButton
 
         FinishAttempt ->
@@ -149,6 +152,12 @@ presentButton model =
             Button.view model.presentButton
 
         PresentStarted ->
+            Button.view model.presentButton
+
+        StopPresentAttempt ->
+            Button.view model.presentButton
+
+        PresentStopped ->
             Button.view model.presentButton
 
         _ ->

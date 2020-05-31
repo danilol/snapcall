@@ -197,7 +197,7 @@ update msg model =
             ( { model
                 | clientConfig = ConfigSuccess config
                 , startButton = newStartBtn
-                , state = Client.Initial
+                , state = Client.ConfigLoaded
               }
             , Cmd.none
             )
@@ -359,7 +359,7 @@ update msg model =
                 newPresentButton =
                     updateButtonState
                         { oldBtn = model.presentButton
-                        , newState = Button.Enabled
+                        , newState = Button.Loading
                         , newLabel = "Present Now"
                         , onClick = OpenScreenShareModal
                         }
@@ -368,6 +368,7 @@ update msg model =
                 | sharingOption = Nothing
                 , showScreenDialog = False
                 , presentButton = newPresentButton
+                , state = state
               }
             , acknowledgeCmd
                 { technology = extractTechnology model.clientConfig
@@ -395,6 +396,9 @@ update msg model =
 
                         PresentAttempt ->
                             PresentStarted
+
+                        StopPresentAttempt ->
+                            PresentStopped
 
                         _ ->
                             acknowledge.state
@@ -594,7 +598,7 @@ stateDisplayText model =
                     "Click to start a new call"
 
                 Client.StartAttempt ->
-                    "LoadingConfig..."
+                    "Starting..."
 
                 _ ->
                     if isSharing then
