@@ -281,7 +281,7 @@ technologyToString tech =
             "WebRTC"
 
         AnyOther ->
-            "Loading"
+            "WrongOne"
 
 
 stateToString : CallState -> String
