@@ -21,7 +21,9 @@ import Css
         , hex
         , margin
         , marginBottom
+        , paddingTop
         , px
+        , rem
         , vh
         , width
         , zero
@@ -34,6 +36,7 @@ import Html.Styled
         , h1
         , h2
         , img
+        , p
         , text
         )
 import Html.Styled.Attributes exposing (css, href)
@@ -43,6 +46,7 @@ import SharedStyles
     exposing
         ( container
         , heroContainer
+        , resetStyles
         , simpleButton
         )
 
@@ -72,7 +76,7 @@ view : { model | title : String } -> { title : String, content : Html Msg }
 view model =
     { title = model.title
     , content =
-        div [ css [ backgroundColor (hex "f9ffeb") ] ]
+        div [ css [ resetStyles, backgroundColor (hex "f9ffeb") ] ]
             [ viewHero
             ]
     }
@@ -87,6 +91,10 @@ viewLogo =
 
 viewHero : Html msg
 viewHero =
+    let
+        scenarioStyle =
+            [ simpleButton, margin zero, fontSize <| rem 1 ]
+    in
     div
         [ css
             [ container
@@ -97,8 +105,26 @@ viewHero =
             [ viewLogo
             , h1 [ css [ fontSize (px 48), margin zero ] ] [ text "SnapCall" ]
             , h2 [] [ text "Snapview code challenge" ]
-            , a [ css [ simpleButton ], Route.href (Route.Call Nothing) ]
-                [ text "Join the Call" ]
+            , div []
+                [ a [ css [ simpleButton ], Route.href (Route.Call Nothing) ]
+                    [ text "Join the Call" ]
+                ]
+            , div [ css [ paddingTop <| px 10 ] ]
+                [ a [ css scenarioStyle, Route.href (Route.Call Nothing) ]
+                    [ text "Scenario 1" ]
+                , a [ css scenarioStyle, Route.href (Route.Call <| Just "guest") ]
+                    [ text "Scenario 2" ]
+                , a [ css scenarioStyle, Route.href (Route.Call <| Just "webRTC") ]
+                    [ text "Scenario 3" ]
+                , a [ css scenarioStyle, Route.href (Route.Call <| Just "error") ]
+                    [ text "Scenario 4" ]
+                ]
+            , div [ css [ paddingTop <| px 10 ] ]
+                [ p [] [ text "Scenario 1: presenter and VNC, mobile = false" ]
+                , p [] [ text "Scenario 2: guest and VNC, mobile = true" ]
+                , p [] [ text "Scenario 3: presenter and webRTC, mobile = false " ]
+                , p [] [ text "Scenario 4: error with first technology and retry with the second" ]
+                ]
             ]
         , div []
             [ img [ css [ height (vh 100) ], Asset.src Asset.elmIcon ] []
