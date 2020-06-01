@@ -1,6 +1,7 @@
 module Page.Call exposing
-    ( Model
-    , Msg
+    ( ConfigStatus(..)
+    , Model
+    , Msg(..)
     , Problem(..)
     , init
     , subscriptions
@@ -55,7 +56,6 @@ import Page.Components.Dialog as Dialog
 import Page.Components.Header as Header
 import Session exposing (Session)
 import SharedStyles
-import Task
 import Time
 import Utils.Chrono as Chrono
 import Utils.Html exposing (emptyHtml)
@@ -104,13 +104,13 @@ init session scenarioParam =
         scenarioConfig =
             ScenarioConfig.prepare scenarioParam
 
-        -- if mobileFlag starts the call right away
-        ( state, sharingOption ) =
+        -- if mobileFlag, starts directly
+        sharingOption =
             if scenarioConfig.mobileFlag then
-                ( CallStarted, Just Mobile )
+                Just Mobile
 
             else
-                ( Client.LoadingConfig, Nothing )
+                Nothing
 
         ( chronoModel, chronoCmd ) =
             Chrono.init
@@ -128,7 +128,7 @@ init session scenarioParam =
       , sharingOption = sharingOption
 
       -- screen control
-      , state = state
+      , state = LoadingConfig
       , showScreenDialog = False
       , startButton = Control.initialStartButton StartCall
       , pauseButton = Control.initialPauseButton PauseCall
@@ -166,20 +166,43 @@ update msg model =
         RequestConfig (Ok config) ->
             let
                 newStartBtn =
-                    updateButtonState
-                        { oldBtn = model.startButton
-                        , newState = Button.Enabled
-                        , newLabel = model.startButton.label
-                        , onClick = model.startButton.onClick
-                        }
+                    if model.mobileFlag then
+                        updateButtonState
+                            { oldBtn = model.startButton
+                            , newState = Button.Loading
+                            , newLabel = model.startButton.label
+                            , onClick = model.startButton.onClick
+                            }
+
+                    else
+                        updateButtonState
+                            { oldBtn = model.startButton
+                            , newState = Button.Enabled
+                            , newLabel = model.startButton.label
+                            , onClick = model.startButton.onClick
+                            }
+
+                modelWithNewButton =
+                    { model
+                        | startButton = newStartBtn
+                        , clientConfig = ConfigSuccess config
+                    }
+
+                ( updatedModel, updatedCmd ) =
+                    -- if mobileFlag starts directly
+                    if model.mobileFlag then
+                        update StartCall modelWithNewButton
+
+                    else
+                        ( { model
+                            | startButton = newStartBtn
+                            , clientConfig = ConfigSuccess config
+                            , state = Client.ConfigLoaded
+                          }
+                        , Cmd.none
+                        )
             in
-            ( { model
-                | clientConfig = ConfigSuccess config
-                , startButton = newStartBtn
-                , state = Client.ConfigLoaded
-              }
-            , Cmd.none
-            )
+            ( updatedModel, updatedCmd )
 
         RequestConfig (Err error) ->
             let
@@ -227,7 +250,6 @@ update msg model =
                     , state = state
                     , mobileFlag = model.mobileFlag
                     }
-                , Cmd.none
                 ]
             )
 
@@ -539,6 +561,7 @@ view :
         , pauseButton : Button.Config Msg
         , finishButton : Button.Config Msg
         , presentButton : Button.Config Msg
+        , mobileFlag : Bool
         , chrono : Chrono.Model
     }
     -> { title : String, content : Html Msg }
@@ -552,7 +575,7 @@ view model =
     in
     { title = model.title
     , content =
-        div [ css [] ]
+        div [ css [ SharedStyles.resetStyles ] ]
             [ Header.view
             , div
                 [ css [ callContainer ] ]
@@ -566,13 +589,16 @@ view model =
                             [ stateDisplayText model
                             , div [] [ text ("ClientType: " ++ clientTypeToString clientType) ]
                             , div [] [ text ("Tech Type: " ++ technologyToString firstTechnology) ]
-                            , screenSelectionDisplayText model
                             , Styled.map GotChronoMsg <| Chrono.view model.chrono
                             ]
                         , Control.startButton model
                         , Control.pauseButton model
                         , Control.finishButton model
-                        , Control.presentButton model
+                        , if model.mobileFlag then
+                            emptyHtml
+
+                          else
+                            Control.presentButton model
                         , Dialog.view
                             { visible = model.showScreenDialog
                             , cancelAction = CloseScreenShareModal
@@ -601,17 +627,26 @@ stateDisplayText model =
                 Initial ->
                     "Click to start the call"
 
-                Client.LoadingConfig ->
+                LoadingConfig ->
                     "LoadingConfig..."
 
-                Client.CallPaused ->
+                ConfigLoaded ->
+                    "ConfigLoaded"
+
+                CallPaused ->
                     "Transmition Paused..."
 
-                Client.CallFinished ->
+                CallFinished ->
                     "Click to start a new call"
 
-                Client.StartAttempt ->
+                StartAttempt ->
                     "Starting..."
+
+                FinishAttempt ->
+                    "Finishing call..."
+
+                Failed ->
+                    "Failed... Retrying..."
 
                 _ ->
                     if isSharing then
@@ -621,24 +656,6 @@ stateDisplayText model =
                         "You're sharing your camera and it's off..."
     in
     h1 [ css [] ] [ text displayText ]
-
-
-screenSelectionDisplayText : { model | sharingOption : Maybe SharingOption } -> Html Msg
-screenSelectionDisplayText model =
-    let
-        isSharing =
-            case model.sharingOption of
-                Just _ ->
-                    True
-
-                Nothing ->
-                    False
-    in
-    if isSharing then
-        div [ css [] ] [ text ("Selection Name: " ++ sharingOptionToString model.sharingOption) ]
-
-    else
-        emptyHtml
 
 
 screenSharingModalView : Technology -> Html Msg

@@ -13,8 +13,7 @@ module Utils.Chrono exposing
 {-| The module to control time. We get the current time, time the meeting started and the duration.
 -}
 
-import Browser
-import Html.Styled exposing (..)
+import Html.Styled exposing (Html, h1, text)
 import Task
 import Time exposing (millisToPosix, posixToMillis)
 import Utils.Html exposing (emptyHtml)
@@ -79,7 +78,7 @@ update msg model =
 
 
 tick : Model -> Sub Msg
-tick model =
+tick _ =
     Time.every 1000 Tick
 
 
@@ -98,7 +97,7 @@ stop model =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
+subscriptions _ =
     Time.every 1000 Tick
 
 
@@ -129,7 +128,7 @@ toTimeDisplay : Time.Posix -> Time.Zone -> Html Msg
 toTimeDisplay time zone =
     let
         hour =
-            -- - 2 is the workaround to handle the timezone
+            -- - 2 is the workaround to handle the timezone XD
             String.pad 2 '0' (String.fromInt <| Time.toHour zone time - 2)
 
         minute =

@@ -15,8 +15,13 @@ import Page.Components.Button as Button exposing (Config, State(..))
 import Utils.Html exposing (emptyHtml)
 
 
+{-| this module abstraction handles the display
+of the buttons for the call
+-}
 
--- initial Button states
+
+
+--initial Button states
 
 
 initialStartButton : msg -> Config msg
@@ -67,98 +72,93 @@ initialPresentButton msg =
 -- Button controls - when to display or hide
 
 
-startButton : { model | startButton : Button.Config msg, state : CallState } -> Html msg
+startButton :
+    { model
+        | startButton : Button.Config msg
+        , state : CallState
+    }
+    -> Html msg
 startButton model =
-    case model.state of
-        LoadingConfig ->
-            Button.view model.startButton
+    let
+        allowedStates =
+            [ LoadingConfig
+            , ConfigLoaded
+            , StartAttempt
+            , CallFinished
+            , Failed
+            ]
+    in
+    --better than casing here, to keep it DRY
+    if List.member model.state allowedStates then
+        Button.view model.startButton
 
-        ConfigLoaded ->
-            Button.view model.startButton
-
-        StartAttempt ->
-            Button.view model.startButton
-
-        CallFinished ->
-            Button.view model.startButton
-
-        _ ->
-            emptyHtml
+    else
+        emptyHtml
 
 
-pauseButton : { model | pauseButton : Button.Config msg, state : CallState } -> Html msg
+pauseButton :
+    { model
+        | pauseButton : Button.Config msg
+        , state : CallState
+    }
+    -> Html msg
 pauseButton model =
-    case model.state of
-        CallStarted ->
-            Button.view model.pauseButton
+    let
+        allowedStates =
+            [ CallStarted
+            , CallPaused
+            , PauseAttempt
+            , CallUnpaused
+            , UnpauseAttempt
+            , PresentStarted
+            , PresentStopped
+            ]
+    in
+    if List.member model.state allowedStates then
+        Button.view model.pauseButton
 
-        CallPaused ->
-            Button.view model.pauseButton
-
-        PauseAttempt ->
-            Button.view model.pauseButton
-
-        CallUnpaused ->
-            Button.view model.pauseButton
-
-        UnpauseAttempt ->
-            Button.view model.pauseButton
-
-        PresentStarted ->
-            Button.view model.pauseButton
-
-        PresentStopped ->
-            Button.view model.pauseButton
-
-        _ ->
-            emptyHtml
+    else
+        emptyHtml
 
 
-finishButton : { model | finishButton : Button.Config msg, state : CallState } -> Html msg
+finishButton :
+    { model
+        | finishButton : Button.Config msg
+        , state : CallState
+    }
+    -> Html msg
 finishButton model =
-    case model.state of
-        CallStarted ->
-            Button.view model.finishButton
+    let
+        allowedStates =
+            [ CallStarted
+            , CallPaused
+            , CallUnpaused
+            , PresentStarted
+            , PresentStopped
+            , FinishAttempt
+            ]
+    in
+    if List.member model.state allowedStates then
+        Button.view model.finishButton
 
-        CallPaused ->
-            Button.view model.finishButton
-
-        CallUnpaused ->
-            Button.view model.finishButton
-
-        PresentStarted ->
-            Button.view model.finishButton
-
-        PresentStopped ->
-            Button.view model.finishButton
-
-        FinishAttempt ->
-            Button.view model.finishButton
-
-        _ ->
-            emptyHtml
+    else
+        emptyHtml
 
 
 presentButton : { model | presentButton : Button.Config msg, state : CallState } -> Html msg
 presentButton model =
-    case model.state of
-        CallStarted ->
-            Button.view model.presentButton
+    let
+        allowedStates =
+            [ CallStarted
+            , CallUnpaused
+            , PresentAttempt
+            , PresentStarted
+            , StopPresentAttempt
+            , PresentStopped
+            ]
+    in
+    if List.member model.state allowedStates then
+        Button.view model.presentButton
 
-        CallUnpaused ->
-            Button.view model.presentButton
-
-        PresentAttempt ->
-            Button.view model.presentButton
-
-        PresentStarted ->
-            Button.view model.presentButton
-
-        StopPresentAttempt ->
-            Button.view model.presentButton
-
-        PresentStopped ->
-            Button.view model.presentButton
-
-        _ ->
-            emptyHtml
+    else
+        emptyHtml

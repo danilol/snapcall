@@ -18,11 +18,6 @@ mobileFlag = false -> WebRTC
 /call?scenario=WebRTC
 
 Scenario 4:
-guest
-mobileFlag = false -> WebRTC
-/call?scenario=WebRTC
-
-Scenario 5:
 presenter
 mobileFlag = false -> VNC
 /call?scenario=error

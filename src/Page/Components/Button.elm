@@ -57,7 +57,7 @@ import Html.Styled.Events exposing (onClick)
 
 moduleName : String
 moduleName =
-    "Components.Button2"
+    "Components.Button"
 
 
 type alias CssColor =

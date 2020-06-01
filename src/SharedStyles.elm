@@ -4,6 +4,7 @@ module SharedStyles exposing
     , header
     , heroContainer
     , logo
+    , resetStyles
     , shadow
     , simpleButton
     , textCenter
@@ -22,6 +23,7 @@ import Css
         , color
         , cursor
         , display
+        , fontFamilies
         , fontSize
         , fontWeight
         , hex
@@ -29,6 +31,7 @@ import Css
         , inlineBlock
         , int
         , lineHeight
+        , margin
         , marginBottom
         , marginRight
         , maxWidth
@@ -50,6 +53,7 @@ import Css
         , transparent
         , verticalAlign
         , width
+        , zero
         )
 
 
@@ -143,4 +147,13 @@ logo =
     batch
         [ display block
         , width (px 110)
+        ]
+
+
+resetStyles : Style
+resetStyles =
+    batch
+        [ padding zero
+        , margin zero
+        , fontFamilies [ "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "Noto Sans", "sans-serif" ]
         ]
