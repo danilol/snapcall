@@ -24,7 +24,8 @@ This will start the app on `http://localhost:8080` and the json-server on `http:
 This will be our mock API. We use two resources: `/config` and `acknowledgments`
 
 When you access the app address, you should see the HomePage:
-![image](https://user-images.githubusercontent.com/446702/83351442-375a7480-a344-11ea-8222-f87ef8fa1615.png)
+![image](https://user-images.githubusercontent.com/446702/83504222-8af3cc00-a4c4-11ea-8514-61f49d069e6b.png)
+
 
 # Code quality
 Run elm-analyse
