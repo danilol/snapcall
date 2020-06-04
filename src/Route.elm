@@ -81,6 +81,6 @@ routeToString route =
                             [ "call" ]
 
                         Just u ->
-                            [ "call", "userType=" ++ u ]
+                            [ "call", "scenario=" ++ u ]
     in
     "/" ++ String.join "?" pieces
